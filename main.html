@@ -828,7 +828,6 @@ textarea{resize:vertical;min-height:80px;line-height:1.6;}
   <div id="onboardWrap" class="onboard-wrap">
     <div class="onboard-title">Getting started</div>
     <div class="onboard-steps">
-      <div class="onboard-item" id="ob1"><div class="onboard-check">1</div><span>Add API keys</span></div>
       <div class="onboard-item" id="ob2"><div class="onboard-check">2</div><span>Upload resume</span></div>
       <div class="onboard-item" id="ob3"><div class="onboard-check">3</div><span>Run first search</span></div>
       <div class="onboard-item" id="ob4"><div class="onboard-check">4</div><span>Apply to a job</span></div>
@@ -2904,7 +2903,7 @@ function updateTierBadge() {
 function updateSearchCounter() {
   const userId = JSON.parse(sessionStorage.getItem('offrd_user') || '{}').id || 'guest';
   const used = parseInt(localStorage.getItem('offrd_s_' + userId) || '0');
-  const max = (S.tierLimits && S.tierLimits[S.tier]) ? S.tierLimits[S.tier].searches : 3;
+  const max = (S.tierLimits && S.tierLimits[S.tier]) ? S.tierLimits[S.tier].searches : 5;
   const remaining = Math.max(0, max - used);
   const label = { free:'Free', starter:'Starter', pro:'Pro', power:'Power' }[S.tier] || 'Free';
   const badge = document.getElementById('searchCounter');
