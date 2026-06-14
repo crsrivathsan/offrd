@@ -1,0 +1,5 @@
+/main.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/app.html
+  Cache-Control: no-cache, no-store, must-revalidate
