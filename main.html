@@ -1204,9 +1204,9 @@ const S = {
 (function init() {
   // API keys are managed server-side — users don't need to configure these
   S.anthropicKey = 'EMBED_ANTHROPIC_KEY';
+  S.apiBase = 'https://api.offrd.net';
   S.alertEmail   = 'crsrivathsan@gmail.com';  // alert destination
   S.appVersion   = '1.0.0';
-  S.apiBase      = 'https://api.offrd.net';   // Cloudflare Worker base URL
   S.jsearchKey = 'EMBED_JSEARCH_KEY';
   S.adzunaAppId  = 'EMBED_ADZUNA_APP_ID';   // get free at api.adzuna.com
   S.adzunaAppKey = 'EMBED_ADZUNA_APP_KEY';  // 100 free calls/day
@@ -1907,40 +1907,9 @@ async function fetchJSearchPage(query, num, boardSource, signal) {
     _wUrl2.searchParams.set('page', _parsedUrl.searchParams.get('page') || '1');
     _wUrl2.searchParams.set('employment_types', _parsedUrl.searchParams.get('employment_types') || '');
     _wUrl2.searchParams.set('experience', _parsedUrl.searchParams.get('experience_required') || '');
-    const res = await fetch(_wUrl2.toString(), { method: 'GET', signal });;
-
-    clearInterval(clTimer);
-    showProgress('clProgress', clStages, clStages.length - 1);
-
-    const data = await response.json();
-    const letter = data.content?.[0]?.text || '';
-
-    if (!letter) throw new Error('No cover letter generated.');
-
-    // Store for download
-    S._lastCoverLetter = { text: letter, jobId, job };
-
-    document.getElementById('clOutput').innerHTML = \`
-      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-        <button onclick="copyCoverLetter()" style="padding:7px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);">📋 Copy</button>
-        <button onclick="downloadCoverLetter('txt')" style="padding:7px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);">⬇ Download TXT</button>
-        <button onclick="generateCoverLetter('\${jobId}')" style="padding:7px 14px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:var(--accent2);">↻ Regenerate</button>
-      </div>
-      <div style="margin-bottom:8px;padding:8px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-left:4px solid #f59e0b;border-radius:8px;font-size:11px;color:var(--text2);line-height:1.6;">
-        <strong style="color:#b45309;">⚠ Please review before sending</strong> — AI can make factual errors. Double-check all names, dates, and claims before using this letter.
-      </div>
-      <div id="clLetterBox" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:16px;font-size:13px;color:var(--text);line-height:1.8;white-space:pre-wrap;max-height:420px;overflow-y:auto;">\${letter}</div>
-      <div style="font-size:10px;color:var(--text3);margin-top:6px;">Tone: \${tone} · \${letter.length} characters · Ready to send</div>
-    \`;
-
-    if (btn) { btn.textContent = '↻ Regenerate'; btn.disabled = false; }
-
-  } catch(err) {
-    clearInterval(clTimer);
-    if (btn) { btn.textContent = '✉ Generate Cover Letter'; btn.disabled = false; }
-    reportAPIFailure('anthropic_cover', 0, err.message || 'Cover letter failed');
-    document.getElementById('clOutput').innerHTML = \`<div class="alert alert-warn">✕ \${err.message}</div>\`;
-  }
+    const res = await fetch(_wUrl2.toString(), { method: 'GET', signal });
+    if (!res.ok) throw new Error(`JSearch ${res.status}`);
+    return await res.json();
 }
 
 function copyCoverLetter() {
@@ -2242,7 +2211,6 @@ function renderVariantCards(jobId, job) {
       }).join('')}
     </div>`;
   // Add disclaimer + company color accent
-  const job = S.jobs.find(j => j.id === jobId);
   const brandColor = getCompanyBrandColor(job?.company || '');
   
   const disclaimer = `<div style="margin-bottom:12px;padding:10px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-left:4px solid #f59e0b;border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6;">
@@ -2796,9 +2764,8 @@ document.addEventListener('click', e => {
 });
 
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js" defer></script>
-<script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js" defer></script></script>
 // ── API Failure Alert System ──────────────────────────────────────
 const _apiErrors = {}; // track error counts to avoid alert spam
 
@@ -2890,6 +2857,986 @@ function showUpgradeWall(reason) {
   }
   document.getElementById('limitBanner').style.display = 'flex';
   offrdTrack('upgrade_wall_shown', {reason: reason, tier: S.tier});
+}
+
+function updateTierBadge() {
+  const badge = document.getElementById('searchCounter');
+  if (badge) {
+    const colors = { free:'var(--border2)', starter:'var(--cyan)', pro:'var(--purple2)', power:'var(--green)' };
+    badge.style.borderColor = colors[S.tier] || 'var(--border2)';
+  }
+}
+
+function updateSearchCounter() {
+  const userId = JSON.parse(sessionStorage.getItem('offrd_user') || '{}').id || 'guest';
+  const used = parseInt(localStorage.getItem('offrd_s_' + userId) || '0');
+  const max = (S.tierLimits && S.tierLimits[S.tier]) ? S.tierLimits[S.tier].searches : 5;
+  const remaining = Math.max(0, max - used);
+  const label = { free:'Free', starter:'Starter', pro:'Pro', power:'Power' }[S.tier] || 'Free';
+  const badge = document.getElementById('searchCounter');
+  if (badge) {
+    const col = remaining === 0 ? 'var(--red,#f87171)' : remaining <= 3 ? 'var(--amber,#f59e0b)' : 'var(--purple2)';
+    badge.innerHTML = label + ' · <span style="color:' + col + '">' + remaining + ' searches left</span>';
+  }
+}
+
+async function logoutUser() {
+  if (!confirm('Sign out of Offrd?')) return;
+  offrdTrack('sign_out', {tier: S.tier});
+  try {
+    sessionStorage.removeItem('offrd_user');
+    localStorage.removeItem('offrd_user');
+  } catch(e) {}
+  window.location.replace('/');
+}
+
+</script>
+</body>
+</html><div style=\"display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;\">
+        <button onclick=\"copyCoverLetter()\" style=\"padding:7px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2)\">📋 Copy</button>
+        <button onclick=\"downloadCoverLetter('pdf')\" style=\"padding:7px 12px;background:#ef4444;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:white\" title=\"Download as PDF\">⬇ PDF</button>
+        \${S.tier !== 'free' ? \'<button onclick=\"downloadCoverLetter(\\'doc\\')\" style=\"padding:7px 12px;background:#2563eb;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:white\">⬇ DOC</button>\' : \'<button onclick=\"showUpgradeWall(\\'docDownload\\')\" style=\"padding:7px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text3)\">⬇ DOC 🔒</button>\'}
+        <button onclick=\"generateCoverLetter('${jobId}')\" style=\"padding:7px 12px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:var(--accent2)\">↻ Regenerate</button>
+      </div>
+      <div style=\"font-size:10px;color:var(--text3);margin-bottom:8px;\">\${S.tier === 'free' ? '⚠ Free plan: PDF only · <a href=\"#\" onclick=\"showUpgradeWall(\\\'docDownload\\\');return false;\" style=\"color:var(--purple2)\">Upgrade for DOC</a>' : '✓ PDF + DOC download included'}</div>
+      <div style="margin-bottom:8px;padding:8px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-left:4px solid #f59e0b;border-radius:8px;font-size:11px;color:var(--text2);line-height:1.6;">
+        <strong style="color:#b45309;">⚠ Please review before sending</strong> — AI can make factual errors. Double-check all names, dates, and claims before using this letter.
+      </div>
+      <div id="clLetterBox" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:16px;font-size:13px;color:var(--text);line-height:1.8;white-space:pre-wrap;max-height:420px;overflow-y:auto;">${letter}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;">Tone: ${tone} · ${letter.length} characters · Ready to send</div>
+    `;
+
+    if (btn) { btn.textContent = '↻ Regenerate'; btn.disabled = false; }
+
+  } catch(err) {
+    clearInterval(clTimer);
+    if (btn) { btn.textContent = '✉ Generate Cover Letter'; btn.disabled = false; }
+    reportAPIFailure('anthropic_cover', 0, err.message || 'Cover letter failed');
+    document.getElementById('clOutput').innerHTML = `<div class="alert alert-warn">✕ ${err.message}</div>`;
+  }
+}
+
+function copyCoverLetter() {
+  const text = S._lastCoverLetter?.text || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy', 2000);
+  });
+}
+
+function downloadCoverLetter(format) {
+  if (format === 'doc' && S.tier === 'free') { showUpgradeWall('docDownload'); return; }
+  offrdTrack('cover_letter_download', {format: format, tier: S.tier});
+  const { text, job } = S._lastCoverLetter || {};
+  if (!text) return;
+
+  const company = (job?.company || 'company').replace(/[^a-zA-Z0-9]/g,'_');
+  const role = (job?.title || 'role').replace(/[^a-zA-Z0-9]/g,'_').slice(0, 30);
+  const baseName = `cover_letter_${company}_${role}`;
+
+  if (format === 'pdf') {
+    // Build a print-friendly HTML page and use browser print to PDF
+    const pdfHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Cover Letter — ${job?.title || 'Role'} at ${job?.company || 'Company'}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Inter', Georgia, serif; font-size: 12pt; line-height: 1.8; color: #1a1a1a; padding: 60px; max-width: 700px; margin: 0 auto; }
+      .header { border-bottom: 2px solid #1a2333; padding-bottom: 16px; margin-bottom: 28px; }
+      .logo { font-size: 11pt; font-weight: 700; color: #1a2333; letter-spacing: 1px; }
+      .logo span { color: #f97316; }
+      .job-ref { font-size: 10pt; color: #64748b; margin-top: 4px; }
+      .letter { white-space: pre-wrap; font-size: 12pt; line-height: 1.9; }
+      .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 9pt; color: #94a3b8; display: flex; justify-content: space-between; }
+      @media print { body { padding: 0; } @page { margin: 2cm; } }
+    </style></head><body>
+    <div class="header">
+      <div class="logo">Offrd<span>.</span></div>
+      <div class="job-ref">Cover Letter · ${job?.title || ''} at ${job?.company || ''}</div>
+    </div>
+    <div class="letter">${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+    <div class="footer">
+      <span>Generated by Offrd · offrd.net</span>
+      <span>${new Date().toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'})}</span>
+    </div>
+    <script>window.onload = () => { window.print(); }<\/script>
+    </body></html>`;
+    const blob = new Blob([pdfHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      // Fallback: download as HTML for printing
+      const a = document.createElement('a');
+      a.href = url; a.download = baseName + '_print.html'; a.click();
+    }
+
+  } else if (format === 'doc') {
+    // Check tier
+    if (S.tier === 'free') { showUpgradeWall('docDownload'); return; }
+
+    // Generate a proper .doc file using HTML-in-doc format (opens in Word)
+    const docHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
+      xmlns:w='urn:schemas-microsoft-com:office:word'
+      xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+      <meta charset='utf-8'>
+      <meta name='ProgId' content='Word.Document'>
+      <meta name='Generator' content='Microsoft Word 15'>
+      <title>Cover Letter</title>
+      <style>
+        body { font-family: Calibri, Arial, sans-serif; font-size: 12pt; line-height: 1.8; color: #1a1a1a; margin: 2cm; }
+        .header { border-bottom: 2pt solid #1a2333; padding-bottom: 10pt; margin-bottom: 20pt; }
+        .brand { font-size: 14pt; font-weight: bold; color: #1a2333; letter-spacing: 1pt; }
+        .job-ref { font-size: 10pt; color: #64748b; margin-top: 4pt; }
+        .letter { font-size: 12pt; line-height: 1.9; white-space: pre-wrap; }
+        .footer { margin-top: 30pt; padding-top: 10pt; border-top: 1pt solid #e2e8f0; font-size: 9pt; color: #94a3b8; }
+      </style>
+      <!--[if gte mso 9]>
+      <xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml>
+      <![endif]-->
+    </head>
+    <body>
+      <div class="header">
+        <div class="brand">Offrd.</div>
+        <div class="job-ref">Cover Letter &bull; ${(job?.title||'').replace(/&/g,'&amp;')} at ${(job?.company||'').replace(/&/g,'&amp;')}</div>
+      </div>
+      <div class="letter">${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>
+      <div class="footer">Generated by Offrd &bull; offrd.net &bull; ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</div>
+    </body></html>`;
+
+    const blob = new Blob(['\ufeff' + docHtml], {
+      type: 'application/msword'
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = baseName + '.doc';
+    a.click();
+  }
+}
+
+async function openTailor(jobId) {
+  const _tj = S.jobs.find(j => j.id === jobId);
+  if (_tj) offrdTrack('resume_tailor_start', {job_title: _tj.title, company: _tj.company, tier: S.tier});
+  // ── Tailor limit check ──
+  const _uid_t = JSON.parse(sessionStorage.getItem('offrd_user') || '{}').id || 'guest';
+  const _tk = 'offrd_t_' + _uid_t;
+  const _tused = parseInt(localStorage.getItem(_tk) || '0');
+  const _maxTailors = S.tierLimits[S.tier]?.tailors || 1;
+  if (_tused >= _maxTailors) {
+    showUpgradeWall('tailors');
+    return;
+  }
+  const job = S.jobs.find(j => j.id === jobId);
+  if (!job) return;
+  if (!S.resumeText && !S.resumeBase64) { alert('No resume found. Please go back to step 1.'); return; }
+  // API key is pre-configured
+
+  const panel = document.getElementById('sidePanel');
+  panel.style.display = 'block';
+  document.getElementById('resultsLayout').classList.add('with-panel');
+
+  // Init variant state for this job
+  if (!S.tailoredResumes[jobId]) S.tailoredResumes[jobId] = {};
+  S._currentTailorJob = jobId;
+
+  panel.innerHTML = `<div class="panel fade-in">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+      <div><div class="panel-title">✦ Tailor Resume</div><div class="panel-sub" style="margin-bottom:0;">${job.title} at ${job.company}</div></div>
+      <button class="panel-close" onclick="closePanel()">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:14px;line-height:1.6;padding:8px 10px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);">
+      Our AI will generate <strong style="color:var(--text);">5 tailored variants</strong> of your resume, each with a different angle. Your original format and structure are preserved. Only the content emphasis, ordering, and keywords change.
+    </div>
+    <div id="tailorProgress"></div>
+    <div id="tailorOutput" style="margin-top:10px;"></div>
+  </div>`;
+
+  const tailorStages = [
+    { label: 'Reading original resume structure', pct: 12 },
+    { label: 'Analysing job description & keywords', pct: 28 },
+    { label: 'Generating variant 1 — Impact-First', pct: 44 },
+    { label: 'Generating variants 2 & 3', pct: 62 },
+    { label: 'Generating variants 4 & 5', pct: 80 },
+    { label: 'Formatting & ATS check', pct: 93 },
+    { label: 'Done', pct: 100 }
+  ];
+  showProgress('tailorProgress', tailorStages, 0);
+  let tailorStageIdx = 0;
+  const tailorTimer = setInterval(() => {
+    tailorStageIdx = Math.min(tailorStageIdx + 1, tailorStages.length - 2);
+    showProgress('tailorProgress', tailorStages, tailorStageIdx);
+  }, 2200);
+
+  try {
+    const profileStr = S.parsedProfile ? JSON.stringify(S.parsedProfile) : '';
+    const resumeContent = S.resumeText || '';
+
+    const prompt = `You are an elite resume writer. The candidate wants 5 tailored variants of their resume for a specific job.
+
+ABSOLUTE RULES — violations destroy user trust and are unacceptable:
+1. ONLY use facts, companies, job titles, dates, and achievements EXPLICITLY present in the Original Resume below.
+2. NEVER invent, add, or infer ANY employer, company, role, achievement, metric, skill, or date not in the original.
+3. NEVER add companies from your training data (e.g. do not add Vodafone, Airtel, or any company not in the resume).
+4. PRESERVE the EXACT employers, titles, dates, and quantified metrics from the original — do not alter facts.
+5. You may ONLY change: wording emphasis, bullet ordering, keyword density, summary framing, skills ordering.
+6. Each variant must be ATS-compliant using keywords from the job description naturally.
+7. NEVER mention the target company name anywhere in the resume — the resume must be generic and reusable. Do not add phrases like 'applying to [Company]' or 'excited to join [Company]' or reference the company by name anywhere in the content.
+7. Return ONLY a valid JSON object — no markdown, no explanation.
+
+Job: ${job.title} at ${job.company}
+Job Description: ${job.description}
+Fit gap to address: ${job.gapReason || 'N/A'}
+Candidate Profile: ${profileStr.slice(0,300)}
+Original Resume:
+${resumeContent.slice(0,2000)}
+
+Return ONLY this JSON (no markdown). Be concise — each variant's sections content should be tight strings:
+{"v1":{"label":"Impact-First","summary":"...","sections":[{"heading":"PROFESSIONAL SUMMARY","content":"..."},{"heading":"CORE COMPETENCIES","content":"..."},{"heading":"PROFESSIONAL EXPERIENCE","content":"..."},{"heading":"KEY ACHIEVEMENTS","content":"Outcome | Impact\nGenAI Automation | $8M revenue + $8.5M savings"},{"heading":"EDUCATION","content":"..."},{"heading":"TECHNICAL SKILLS","content":"..."}]},"v2":{"label":"Skills-Forward","summary":"...","sections":[...same headings...]},"v3":{"label":"Narrative-Led","summary":"...","sections":[...]},"v4":{"label":"Concise 1-Page","summary":"...","sections":[...max 3 bullets per role...]},"v5":{"label":"Technical-Deep","summary":"...","sections":[...]}}
+
+Rules: bullet points use "• " prefix. Content strings use \n for newlines. No trailing commas. Close all braces.`;
+
+    const res = await fetch(S.apiBase + '/api/tailor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], max_tokens: 8000 })
+    });
+
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    let raw = data.content.map(b => b.text||'').join('');
+
+    // Step 1: strip markdown fences
+    raw = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
+
+    // Step 2: find the outermost { } object
+    const objStart = raw.indexOf('{');
+    const objEnd = raw.lastIndexOf('}');
+    if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+      raw = raw.slice(objStart, objEnd + 1);
+    }
+
+    // Step 3: remove trailing commas before } or ]
+    raw = raw.replace(/,(\s*[}\]])/g, '$1');
+
+    // Step 4: try to parse — if it fails, attempt to repair truncated JSON
+    let variants = null;
+    try {
+      variants = JSON.parse(raw);
+    } catch(e1) {
+      // Repair: find last complete variant block and close the object
+      try {
+        // Find last fully closed variant (ends with ]}  or ]})
+        const lastGoodEnd = raw.lastIndexOf(']}');
+        if (lastGoodEnd > 0) {
+          // Count open braces to figure out how many } we need
+          const partial = raw.slice(0, lastGoodEnd + 2);
+          let depth = 0;
+          for (const ch of partial) { if (ch==='{') depth++; else if (ch==='}') depth--; }
+          const closing = '}'.repeat(Math.max(0, depth));
+          variants = JSON.parse(partial + closing);
+        }
+      } catch(e2) {
+        variants = null;
+      }
+    }
+
+    clearInterval(tailorTimer);
+    showProgress('tailorProgress', tailorStages, tailorStages.length-1);
+    setTimeout(() => { const tp = document.getElementById('tailorProgress'); if(tp) tp.style.display='none'; }, 500);
+
+    // Validate that we got an object with at least v1
+    if (variants && typeof variants === 'object' && (variants.v1 || variants.v2)) {
+      // Increment tailor count
+      const _uid_t2 = JSON.parse(sessionStorage.getItem('offrd_user') || '{}').id || 'guest';
+      const _tk2 = 'offrd_t_' + _uid_t2;
+      localStorage.setItem(_tk2, parseInt(localStorage.getItem(_tk2) || '0') + 1);
+      S.tailoredResumes[jobId] = variants;
+      renderVariantCards(jobId, job);
+    } else {
+      // Last resort: try to extract whatever variants are in there
+      const partialVariants = {};
+      ['v1','v2','v3','v4','v5'].forEach(vid => {
+        try {
+          const start = raw.indexOf('"' + vid + '"');
+          if (start === -1) return;
+          // Find the label at minimum
+          const labelMatch = raw.slice(start).match(/"label"\s*:\s*"([^"]+)"/);
+          const summaryMatch = raw.slice(start).match(/"summary"\s*:\s*"([^"]+)"/);
+          if (labelMatch) {
+            partialVariants[vid] = {
+              label: labelMatch[1],
+              summary: summaryMatch ? summaryMatch[1] : '',
+              sections: [{ heading: 'SUMMARY', content: summaryMatch ? summaryMatch[1] : 'Content truncated — please retry.' }]
+            };
+          }
+        } catch(e) {}
+      });
+      if (Object.keys(partialVariants).length > 0) {
+        S.tailoredResumes[jobId] = partialVariants;
+        renderVariantCards(jobId, job);
+      } else {
+        document.getElementById('tailorOutput').innerHTML =
+          '<div class="alert alert-warn">⚠ Could not parse variants. Please try again — reduce results per board first to free up API capacity.</div>';
+      }
+    }
+
+  } catch(err) {
+    clearInterval(tailorTimer);
+    document.getElementById('tailorOutput').innerHTML = `<div class="alert alert-warn">✕ ${err.message}</div>`;
+  }
+}
+
+function renderVariantCards(jobId, job) {
+  const variants = S.tailoredResumes[jobId];
+  const html = `
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Choose a variant to preview or download</div>
+    <div class="variant-grid">
+      ${VARIANT_DEFS.map(vd => {
+        const v = variants[vd.id];
+        if (!v) return '';
+        return `<div class="variant-card" id="vcard-${vd.id}" onclick="selectVariant('${vd.id}','${jobId}')">
+          <div class="variant-card-top">
+            <span class="variant-name">${vd.name}</span>
+            <span class="variant-badge" style="color:${vd.badgeColor};background:${vd.badgeBg};">${vd.badge}</span>
+          </div>
+          <div class="variant-desc">${vd.desc}</div>
+          <div class="variant-actions">
+            <button class="eye-icon-btn" onclick="event.stopPropagation();previewVariant('${vd.id}','${jobId}','${job.title.replace(/'/g,'').replace(/"/g,'')}');" title="Preview">👁</button>
+            <button class="btn-sm btn-green" style="flex:1;" onclick="event.stopPropagation();downloadVariant('${vd.id}','${jobId}','${job.title.replace(/'/g,'').replace(/"/g,'')}','docx')">⬇ DOCX</button>
+            <button class="btn-sm btn-outline" onclick="event.stopPropagation();downloadVariant('${vd.id}','${jobId}','${job.title.replace(/'/g,'').replace(/"/g,'')}','pdf')">⬇ PDF</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  document.getElementById('tailorOutput').innerHTML = html;
+}
+
+function selectVariant(vid, jobId) {
+  document.querySelectorAll('.variant-card').forEach(c => c.classList.remove('selected'));
+  const el = document.getElementById('vcard-' + vid);
+  if (el) el.classList.add('selected');
+}
+
+// ─── Resume HTML renderer (preserves original format) ─────────────────
+function buildResumeHTML(variantData, candidateName) {
+  const name = candidateName || (S.parsedProfile?.name) || 'Resume';
+  const contact = S.parsedProfile ? `${S.parsedProfile.currentTitle || ''} · ${S.parsedProfile.yearsExperience || ''}+ years experience` : '';
+  let html = `<div class="resume-doc">`;
+  html += `<div class="r-name">${name}</div>`;
+  html += `<div class="r-contact">${contact}</div>`;
+
+  const sections = variantData.sections || [];
+  sections.forEach(sec => {
+    html += `<div class="r-section">${sec.heading}</div>`;
+    if (!sec.content) return;
+
+    // Handle achievements table section
+    if (sec.heading.includes('ACHIEVEMENT') || sec.heading.includes('SNAPSHOT')) {
+      const rows = sec.content.split('\n').filter(l => l.includes('|') && l.trim());
+      if (rows.length > 1) {
+        html += `<table class="r-table">`;
+        rows.forEach((row, i) => {
+          const cells = row.split('|').map(c => c.trim()).filter(Boolean);
+          if (i === 0) html += `<tr>${cells.map(c=>`<th>${c}</th>`).join('')}</tr>`;
+          else if (!row.match(/^[\s\-|]+$/)) html += `<tr>${cells.map(c=>`<td>${c}</td>`).join('')}</tr>`;
+        });
+        html += `</table>`;
+        return;
+      }
+    }
+
+    // Handle skills section (key: value pairs)
+    if (sec.heading.includes('SKILL') || sec.heading.includes('TECHNICAL')) {
+      sec.content.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        const parts = trimmed.split(':');
+        if (parts.length >= 2) {
+          html += `<div class="r-skills-group"><span class="r-bold">${parts[0].replace(/^\*\*/,'').replace(/\*\*$/,'').replace(/^•\s*/,'')}:</span> ${parts.slice(1).join(':').trim()}</div>`;
+        } else if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
+          html += `<div class="r-bullet">${trimmed.replace(/^[•\-]\s*/,'')}</div>`;
+        } else {
+          html += `<div class="r-para">${trimmed}</div>`;
+        }
+      });
+      return;
+    }
+
+    // General content
+    let inSubsection = false;
+    sec.content.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) { html += '<div style="margin-bottom:4px;"></div>'; return; }
+
+      // Sub-company/role header (bold lines)
+      if (trimmed.startsWith('###') || (trimmed.startsWith('**') && trimmed.endsWith('**') && !trimmed.startsWith('•'))) {
+        const text = trimmed.replace(/^###\s*/,'').replace(/^\*\*/,'').replace(/\*\*$/,'');
+        html += `<div class="r-company">${text}</div>`;
+        inSubsection = true;
+      }
+      // Role meta (italic or location/date lines)
+      else if (trimmed.startsWith('_') || (inSubsection && trimmed.match(/^\[|^\d{4}|^[A-Z][a-z]+,/))) {
+        html += `<div class="r-role-meta">${trimmed.replace(/^_|_$/g,'')}</div>`;
+      }
+      // Subsection bold header (like **Digital Transformation & AI**)
+      else if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
+        html += `<div class="r-bold r-para" style="margin-top:8px;">${trimmed.replace(/^\*\*|\*\*$/g,'')}</div>`;
+      }
+      // Bullet
+      else if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')) {
+        const text = trimmed.replace(/^[•\-\*]\s*/,'').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+        html += `<div class="r-bullet">${text}</div>`;
+      }
+      // Regular paragraph
+      else {
+        const text = trimmed.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+        html += `<div class="r-para">${text}</div>`;
+      }
+    });
+  });
+
+  html += `</div>`;
+  return html;
+}
+
+// ─── Preview ──────────────────────────────────────────────────────────
+let _previewMeta = {};
+function previewVariant(vid, jobId, jobTitle) {
+  const variants = S.tailoredResumes[jobId];
+  if (!variants || !variants[vid]) return;
+  _previewMeta = { vid, jobId, jobTitle };
+  const vd = VARIANT_DEFS.find(v => v.id === vid);
+  const resumeHTML = buildResumeHTML(variants[vid], S.parsedProfile?.name);
+  document.getElementById('previewTitle').textContent = `Preview — ${vd?.name || vid} · ${jobTitle}`;
+  document.getElementById('previewBody').innerHTML = resumeHTML;
+  document.getElementById('previewModalOverlay').classList.add('open');
+}
+function closePreview() { document.getElementById('previewModalOverlay').classList.remove('open'); }
+function downloadFromPreview(fmt) { downloadVariant(_previewMeta.vid, _previewMeta.jobId, _previewMeta.jobTitle, fmt); }
+
+// ─── Download: DOCX ───────────────────────────────────────────────────
+function downloadVariant(vid, jobId, jobTitle, fmt) {
+  offrdTrack('resume_download', {variant: vid, format: fmt, job_title: jobTitle, tier: S.tier});
+  const variants = S.tailoredResumes[jobId];
+  if (!variants || !variants[vid]) { alert('Variant not found'); return; }
+  if (fmt === 'pdf') downloadVariantPdf(vid, jobId, jobTitle);
+  else downloadVariantDocx(vid, jobId, jobTitle);
+}
+
+function downloadVariantDocx(vid, jobId, jobTitle) {
+  if (!window.docx) { alert('Document library still loading — please wait a moment and try again.'); return; }
+  const variants = S.tailoredResumes[jobId];
+  const v = variants[vid];
+  if (!v) return;
+  try {
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle, Table, TableRow, TableCell, WidthType, AlignmentType } = window.docx;
+    const name = S.parsedProfile?.name || 'Resume';
+    const contact = S.parsedProfile ? `${S.parsedProfile.currentTitle || ''} | ${S.parsedProfile.yearsExperience || ''}+ years experience` : '';
+    const children = [];
+
+    // Name
+    children.push(new Paragraph({ children: [new TextRun({ text: name, bold: true, size: 48, font: 'Calibri' })], alignment: AlignmentType.CENTER, spacing: { after: 60 } }));
+    // Contact
+    children.push(new Paragraph({ children: [new TextRun({ text: contact, size: 18, color: '555570', font: 'Calibri' })], alignment: AlignmentType.CENTER, spacing: { after: 160 } }));
+
+    (v.sections || []).forEach(sec => {
+      // Section heading with bottom border
+      children.push(new Paragraph({
+        children: [new TextRun({ text: sec.heading, bold: true, size: 22, allCaps: true, font: 'Calibri', color: '1a1a2e' })],
+        border: { bottom: { color: '1a1a2e', space: 2, style: BorderStyle.SINGLE, size: 8 } },
+        spacing: { before: 240, after: 80 }
+      }));
+
+      if (!sec.content) return;
+
+      // Achievements table
+      if ((sec.heading.includes('ACHIEVEMENT') || sec.heading.includes('SNAPSHOT')) && sec.content.includes('|')) {
+        const rows = sec.content.split('\n').filter(l => l.includes('|') && l.trim() && !l.match(/^[\s\-|]+$/));
+        if (rows.length > 1) {
+          const tableRows = rows.map((row, i) => {
+            const cells = row.split('|').map(c => c.trim()).filter(Boolean);
+            return new TableRow({ children: cells.map(cell => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: cell, bold: i===0, size: 18, font:'Calibri' })], spacing:{after:40} })], width: { size: Math.floor(9000/cells.length), type: WidthType.DXA } })) });
+          });
+          children.push(new Table({ rows: tableRows, width: { size: 9000, type: WidthType.DXA } }));
+          return;
+        }
+      }
+
+      // Regular lines
+      sec.content.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) { children.push(new Paragraph({ text: '', spacing: { after: 40 } })); return; }
+        const isBold = trimmed.startsWith('**') && trimmed.endsWith('**');
+        const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*');
+        const isSubHead = trimmed.startsWith('###');
+        const cleanText = trimmed.replace(/^###\s*/,'').replace(/^\*\*/,'').replace(/\*\*$/,'').replace(/^[•\-\*]\s*/,'');
+        const inlineRuns = cleanText.split(/(\*\*[^*]+\*\*)/).map(part => {
+          if (part.startsWith('**') && part.endsWith('**')) return new TextRun({ text: part.slice(2,-2), bold: true, size: 19, font: 'Calibri' });
+          return new TextRun({ text: part, size: 19, font: 'Calibri' });
+        });
+        if (isSubHead || isBold) {
+          children.push(new Paragraph({ children: [new TextRun({ text: cleanText, bold: true, size: 20, font: 'Calibri', color: '1a1a2e' })], spacing: { before: 120, after: 40 } }));
+        } else if (isBullet) {
+          children.push(new Paragraph({ children: inlineRuns, bullet: { level: 0 }, spacing: { after: 60 } }));
+        } else {
+          children.push(new Paragraph({ children: inlineRuns, spacing: { after: 60 } }));
+        }
+      });
+    });
+
+    const doc = new Document({ sections: [{ properties: { page: { margin: { top: 720, bottom: 720, left: 900, right: 900 } } }, children }] });
+    const vdName = VARIANT_DEFS.find(d => d.id === vid)?.name || vid;
+    Packer.toBlob(doc).then(blob => {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `Resume_${jobTitle.replace(/\s+/g,'_')}_${vdName.replace(/\s+/g,'_')}.docx`; a.click();
+    });
+  } catch(e) { alert('DOCX error: ' + e.message + '\n' + e.stack); }
+}
+
+function downloadVariantPdf(vid, jobId, jobTitle) {
+  if (!window.jspdf) { alert('PDF library still loading — please wait a moment and try again.'); return; }
+  const variants = S.tailoredResumes[jobId];
+  const v = variants[vid];
+  if (!v) return;
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const ml = 18, mr = 18, pageW = 210;
+    const maxW = pageW - ml - mr;
+    let y = 18;
+    const name = S.parsedProfile?.name || 'Resume';
+    const contact = S.parsedProfile ? `${S.parsedProfile.currentTitle || ''} | ${S.parsedProfile.yearsExperience || ''}+ years` : '';
+
+    // Name
+    doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(26,26,46);
+    const nw = doc.getTextWidth(name); doc.text(name, (pageW - nw)/2, y); y += 8;
+    // Contact
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(85,85,112);
+    const cw = doc.getTextWidth(contact); doc.text(contact, (pageW-cw)/2, y); y += 10;
+
+    (v.sections || []).forEach(sec => {
+      if (y > 268) { doc.addPage(); y = 18; }
+      // Section heading
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(26,26,46);
+      doc.text(sec.heading.toUpperCase(), ml, y);
+      y += 1;
+      doc.setDrawColor(26,26,46); doc.setLineWidth(0.4); doc.line(ml, y+1, pageW-mr, y+1); y += 5;
+
+      if (!sec.content) return;
+
+      // Achievements table
+      if ((sec.heading.includes('ACHIEVEMENT') || sec.heading.includes('SNAPSHOT')) && sec.content.includes('|')) {
+        const rows = sec.content.split('\n').filter(l => l.includes('|') && l.trim() && !l.match(/^[\s\-|]+$/));
+        if (rows.length > 1) {
+          const colW = maxW / Math.max(...rows.map(r => r.split('|').filter(Boolean).length));
+          rows.forEach((row, ri) => {
+            if (y > 268) { doc.addPage(); y = 18; }
+            const cells = row.split('|').map(c => c.trim()).filter(Boolean);
+            cells.forEach((cell, ci) => {
+              const cx = ml + ci * colW;
+              if (ri === 0) { doc.setFillColor(240,240,243); doc.rect(cx, y-4, colW, 7, 'F'); doc.setFont('helvetica','bold'); }
+              else doc.setFont('helvetica','normal');
+              doc.setFontSize(8.5); doc.setTextColor(26,26,46);
+              doc.text(cell.slice(0,35), cx+1, y);
+            });
+            y += 7;
+          });
+          y += 2; return;
+        }
+      }
+
+      sec.content.split('\n').forEach(line => {
+        if (y > 268) { doc.addPage(); y = 18; }
+        const trimmed = line.trim();
+        if (!trimmed) { y += 2; return; }
+        const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*');
+        const isBoldHead = (trimmed.startsWith('**') && trimmed.endsWith('**')) || trimmed.startsWith('###');
+        const cleanText = trimmed.replace(/^###\s*/,'').replace(/^\*\*|\*\*$/g,'').replace(/^[•\-\*]\s*/,'').replace(/\*\*([^*]+)\*\*/g,'$1');
+
+        if (isBoldHead) {
+          doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(26,26,46);
+          doc.text(cleanText.slice(0,90), ml, y); y += 5;
+        } else if (isBullet) {
+          doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(50,50,70);
+          doc.text('•', ml, y);
+          const wrapped = doc.splitTextToSize(cleanText, maxW - 5);
+          wrapped.forEach((wl, wi) => { if(y>268){doc.addPage();y=18;} doc.text(wl, ml+4, y); y += 4.5; });
+        } else {
+          doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(50,50,70);
+          const wrapped = doc.splitTextToSize(cleanText, maxW);
+          wrapped.forEach(wl => { if(y>268){doc.addPage();y=18;} doc.text(wl, ml, y); y += 4.5; });
+        }
+      });
+      y += 3;
+    });
+
+    const vdName = VARIANT_DEFS.find(d => d.id === vid)?.name || vid;
+    doc.save(`Resume_${jobTitle.replace(/\s+/g,'_')}_${vdName.replace(/\s+/g,'_')}.pdf`);
+  } catch(e) { alert('PDF error: ' + e.message); }
+}
+
+function copyTailored() {
+  const text = document.getElementById('tailoredText')?.innerText;
+  if (text) navigator.clipboard.writeText(text).then(() => { alert('Copied!'); });
+}
+
+
+
+// ─── Pipeline ─────────────────────────────────────────────────────────
+function saveJobToPipeline(jobId) {
+  const job = S.jobs.find(j => j.id === jobId);
+  if (!job) return;
+  const alreadyIn = Object.values(S.pipeline).some(col => col.find(j => j.id === jobId));
+  if (alreadyIn) { switchTab('pipeline'); return; }
+  S.pipeline.saved.push({ id: job.id, title: job.title, company: job.company, source: job.source, url: job.url, score: job.scores?.overall, addedAt: new Date().toISOString() });
+  persistPipeline();
+  updateOnboarding();
+  const btn = document.getElementById('save-' + jobId);
+  if (btn) { btn.textContent = '✓ Saved'; btn.style.color = 'var(--green)'; }
+  updatePipelineBadge();
+}
+
+function persistPipeline() {
+  localStorage.setItem('offrd_pipeline', JSON.stringify(S.pipeline));
+}
+
+function updatePipelineBadge() {
+  const total = Object.values(S.pipeline).reduce((s,c) => s + c.length, 0);
+  const badge = document.getElementById('pipelineBadge');
+  if (badge) { badge.style.display = total > 0 ? 'inline' : 'none'; badge.textContent = total; }
+}
+
+function moveJob(jobId, fromCol, toCol) {
+  const idx = S.pipeline[fromCol].findIndex(j => j.id === jobId);
+  if (idx === -1) return;
+  const [job] = S.pipeline[fromCol].splice(idx, 1);
+  if (toCol) S.pipeline[toCol].push(job);
+  persistPipeline();
+  updatePipelineBadge();
+  updateOnboarding();
+  renderPipeline();
+}
+
+function renderPipeline() {
+  const cols = ['saved','applied','interview','offer'];
+  const nextCol = { saved:'applied', applied:'interview', interview:'offer', offer: null };
+  const nextLabel = { saved:'→ Applied', applied:'→ Interview', interview:'→ Offer', offer: null };
+  updatePipelineBadge();
+  cols.forEach(col => {
+    const el = document.getElementById('col-' + col);
+    const cnt = document.getElementById('cnt-' + col);
+    if (!el) return;
+    cnt.textContent = S.pipeline[col].length;
+    if (!S.pipeline[col].length) { el.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:20px 0;">Empty</div>'; return; }
+    el.innerHTML = S.pipeline[col].map(job => {
+      const scoreCol = job.score >= 75 ? 'var(--green)' : job.score >= 50 ? 'var(--amber)' : 'var(--red)';
+      const next = nextCol[col]; const nextLbl = nextLabel[col];
+      return `<div class="pipeline-card">
+        <div class="pipeline-card-title">${job.title}</div>
+        <div class="pipeline-card-company">${job.company}</div>
+        <div class="pipeline-card-meta">
+          <span class="tag tag-${job.source}" style="font-size:10px;">${job.source}</span>
+          <span style="font-size:11px;font-family:'DM Mono',monospace;color:${scoreCol};">${job.score || '?'}</span>
+        </div>
+        <div class="pipeline-move" style="margin-top:8px;">
+          ${next ? `<button onclick="moveJob('${job.id}','${col}','${next}')">${nextLbl}</button>` : '<span style="font-size:10px;color:var(--green);">🎉 Offer!</span>'}
+          <button onclick="moveJob('${job.id}','${col}',null)" style="color:var(--red);">Remove</button>
+          <button onclick="openApply('${job.url}', S.jobs.find(j=>j.id==='${job.id}') || {source:'${job.source}',title:'${job.title}',company:'${job.company}',location:''})">Apply ↗</button>
+        </div>
+      </div>`;
+    }).join('');
+  });
+}
+
+function clearPipeline() {
+  if (!confirm('Clear all pipeline items?')) return;
+  S.pipeline = { saved:[], applied:[], interview:[], offer:[] };
+  persistPipeline();
+  renderPipeline();
+  updatePipelineBadge();
+}
+
+function exportPipelineCSV() {
+  const rows = [['Stage','Title','Company','Source','Score','URL','Added']];
+  ['saved','applied','interview','offer'].forEach(col => {
+    S.pipeline[col].forEach(j => rows.push([col, j.title, j.company, j.source, j.score||'', j.url||'', j.addedAt||'']));
+  });
+  const csv = rows.map(r => r.map(c => '"' + String(c||'').replace(/"/g,'""') + '"').join(',')).join('\n');
+  const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'jobmatch_pipeline.csv'; a.click();
+}
+
+// ─── Search History ───────────────────────────────────────────────────
+function saveSearchToHistory(keywords, location, boards, resultCount) {
+  const entry = { id: Date.now(), keywords, location, boards, resultCount, date: new Date().toLocaleDateString(), jobs: S.jobs.slice(0,50) };
+  S.searchHistory.unshift(entry);
+  if (S.searchHistory.length > 5) S.searchHistory = S.searchHistory.slice(0,5);
+  localStorage.setItem('offrd_history', JSON.stringify(S.searchHistory.map(e => ({ ...e, jobs: [] }))));
+}
+
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  if (!S.searchHistory.length) {
+    el.innerHTML = '<div class="empty"><span class="empty-icon">🕐</span><h3>No search history yet</h3><p>Run your first search and it will appear here.</p></div>';
+    return;
+  }
+  el.innerHTML = '<div class="history-list">' + S.searchHistory.map(h => `
+    <div class="history-item" onclick="rerunSearch('${h.id}')">
+      <div>
+        <div class="history-kw">${h.keywords}</div>
+        <div class="history-meta">${h.location||'Any location'} · ${(h.boards||[]).join(', ')} · ${h.resultCount||0} results · ${h.date}</div>
+      </div>
+      <span class="history-rerun">↺ Re-run</span>
+    </div>`).join('') + '</div>';
+}
+
+function rerunSearch(histId) {
+  const entry = S.searchHistory.find(h => String(h.id) === String(histId));
+  if (!entry) return;
+  document.getElementById('searchKeywords').value = entry.keywords;
+  // restore country from history
+  const _csel = document.getElementById('countrySelect');
+  if (_csel && entry.countryCode) _csel.value = entry.countryCode;
+  renderLocTags();
+  switchTab('search');
+  goToStep(2);
+  setTimeout(() => runJobSearch(), 200);
+}
+
+function clearHistory() {
+  if (!confirm('Clear search history?')) return;
+  S.searchHistory = [];
+  localStorage.removeItem('offrd_history');
+  renderHistory();
+}
+
+// ─── Skill Gap (shown in side panel) ─────────────────────────────────
+function renderSkillGap(job) {
+  if (!S.parsedProfile?.topSkills?.length) return '';
+  const jdText = (job.title + ' ' + job.description).toLowerCase();
+  const skills = S.parsedProfile.topSkills.slice(0, 8);
+  const rows = skills.map(skill => {
+    const match = jdText.includes(skill.toLowerCase()) ? Math.floor(70 + Math.random() * 30) : Math.floor(20 + Math.random() * 40);
+    const col = match >= 70 ? 'var(--green)' : match >= 45 ? 'var(--amber)' : 'var(--red)';
+    return `<div class="skill-bar-row">
+      <span class="skill-bar-label" title="${skill}">${skill}</span>
+      <div class="skill-bar-track"><div class="skill-bar-fill" style="width:${match}%;background:${col};"></div></div>
+      <span class="skill-bar-pct" style="color:${col};">${match}%</span>
+    </div>`;
+  }).join('');
+  return `<div class="skill-gap-wrap">
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Skill match for this role</div>
+    ${rows}
+  </div>`;
+}
+
+// ─── Salary Intelligence ──────────────────────────────────────────────
+function renderSalaryBench(job) {
+  if (!job.salary) return '';
+  return `<div class="salary-bench">
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Salary context</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;">Listed: <strong style="color:var(--text);">${job.salary}</strong></div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px;">Score ${job.scores?.salaryMatch || 0}/100 against your target range</div>
+  </div>`;
+}
+
+// ─── Progress Bar ────────────────────────────────────────────────────────
+let progressTimers = {};
+
+function showProgress(containerId, stages, activeIdx) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.style.display = 'block';
+  const stage = stages[activeIdx] || stages[stages.length - 1];
+  const pct = stage.pct;
+
+  // Auto-animate pct smoothly
+  if (!progressTimers[containerId]) {
+    progressTimers[containerId] = { current: 0 };
+  }
+  const state = progressTimers[containerId];
+  state.target = pct;
+
+  const stepsHtml = stages.map((s, i) => {
+    const cls = i < activeIdx ? 'done' : i === activeIdx ? 'active' : '';
+    return `<div class="progress-step ${cls}"><div class="ps-dot"></div><span>${s.label}</span></div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="progress-wrap">
+      <div class="progress-header">
+        <span class="progress-stage">${stage.label}</span>
+        <span class="progress-pct" id="${containerId}-pct">${pct}%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="${containerId}-fill" style="width:${pct}%"></div>
+      </div>
+      <div class="progress-steps">${stepsHtml}</div>
+    </div>`;
+}
+
+function hideProgress(containerId) {
+  const el = document.getElementById(containerId);
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+  delete progressTimers[containerId];
+}
+
+// ─── Location Autocomplete ─────────────────────────────────────────────
+S.selectedLocations = []; // kept for compat
+let locFocusIdx = -1;
+
+const CITIES = [
+  // A
+  "Amsterdam, Netherlands","Auckland, New Zealand","Austin, Texas, USA","Abu Dhabi, UAE","Ahmedabad, India","Athens, Greece","Atlanta, Georgia, USA",
+  // B
+  "Bangalore, India","Bangkok, Thailand","Barcelona, Spain","Beijing, China","Berlin, Germany","Bogotá, Colombia","Boston, Massachusetts, USA","Brussels, Belgium","Budapest, Hungary","Buenos Aires, Argentina","Buffalo, New York, USA",
+  // C
+  "Cairo, Egypt","Calgary, Canada","Cape Town, South Africa","Chandigarh, India","Charlotte, North Carolina, USA","Chennai, India","Chicago, Illinois, USA","Chongqing, China","Colombo, Sri Lanka","Copenhagen, Denmark","Chengdu, China","Christchurch, New Zealand","Columbus, Ohio, USA","Casablanca, Morocco",
+  // D
+  "Dallas, Texas, USA","Delhi, India","Denver, Colorado, USA","Detroit, Michigan, USA","Dubai, UAE","Dublin, Ireland","Düsseldorf, Germany",
+  // E
+  "Edinburgh, Scotland, UK","Edmonton, Canada",
+  // F
+  "Frankfurt, Germany","Fukuoka, Japan",
+  // G
+  "Glasgow, Scotland, UK","Guangzhou, China","Guadalajara, Mexico","Geneva, Switzerland",
+  // H
+  "Hamburg, Germany","Hangzhou, China","Helsinki, Finland","Ho Chi Minh City, Vietnam","Hong Kong","Houston, Texas, USA","Hyderabad, India",
+  // I
+  "Istanbul, Turkey",
+  // J
+  "Jakarta, Indonesia","Jaipur, India","Johannesburg, South Africa","Jakarta, Indonesia",
+  // K
+  "Karachi, Pakistan","Kiev, Ukraine","Kolkata, India","Kuala Lumpur, Malaysia","Kuwait City, Kuwait",
+  // L
+  "Lagos, Nigeria","Lahore, Pakistan","Lima, Peru","Lisbon, Portugal","London, UK","Los Angeles, California, USA","Lyon, France","Lucknow, India",
+  // M
+  "Madrid, Spain","Manchester, UK","Manila, Philippines","Melbourne, Australia","Mexico City, Mexico","Miami, Florida, USA","Milan, Italy","Minneapolis, Minnesota, USA","Montreal, Canada","Moscow, Russia","Mumbai, India","Munich, Germany",
+  // N
+  "Nairobi, Kenya","Nanjing, China","Nashville, Tennessee, USA","New York City, USA","New Delhi, India",
+  // O
+  "Oslo, Norway","Ottawa, Canada","osaka, Japan",
+  // P
+  "Paris, France","Perth, Australia","Philadelphia, Pennsylvania, USA","Phoenix, Arizona, USA","Prague, Czech Republic","Pune, India",
+  // Q
+  "Quebec City, Canada",
+  // R
+  "Riyadh, Saudi Arabia","Rome, Italy",
+  // S
+  "San Francisco, California, USA","Santiago, Chile","São Paulo, Brazil","Seattle, Washington, USA","Seoul, South Korea","Shanghai, China","Shenzhen, China","Singapore","Stockholm, Sweden","Stuttgart, Germany","Sydney, Australia",
+  // T
+  "Taipei, Taiwan","Tel Aviv, Israel","Tokyo, Japan","Toronto, Canada",
+  // U
+  "Utrecht, Netherlands",
+  // V
+  "Vancouver, Canada","Vienna, Austria",
+  // W
+  "Warsaw, Poland","Washington D.C., USA",
+  // Z
+  "Zurich, Switzerland",
+  // Remote
+  "Remote","Remote (Worldwide)"
+];
+
+
+document.addEventListener('click', e => {
+  // location dropdown removed
+});
+
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js" defer></script></script>
+// ── API Failure Alert System ──────────────────────────────────────
+const _apiErrors = {}; // track error counts to avoid alert spam
+
+async function reportAPIFailure(service, errorCode, errorMsg, context = {}) {
+  const key = `${service}_${errorCode}`;
+  const now = Date.now();
+
+  // Debounce — don't alert same error more than once per 30 mins
+  if (_apiErrors[key] && (now - _apiErrors[key]) < 30 * 60 * 1000) return;
+  _apiErrors[key] = now;
+
+  // Log to GA4
+  offrdTrack('api_failure', {
+    service,
+    error_code: String(errorCode),
+    error_msg: errorMsg.slice(0, 100),
+    user_tier: S.tier
+  });
+
+  // Show in-app warning to user
+  const statusEl = document.getElementById('jobStatus');
+  if (statusEl && service !== 'anthropic_score') {
+    updateJobStatus(
+      `⚠ ${getServiceLabel(service)} is experiencing issues. Results may be limited. We've been notified.`,
+      'warn'
+    );
+  }
+
+  // Send alert via EmailJS (free tier — 200 emails/month)
+  // Set up at emailjs.com — replace SERVICE_ID, TEMPLATE_ID, PUBLIC_KEY
+  try {
+    const payload = {
+      service_id:  'EMAILJS_SERVICE_ID',
+      template_id: 'EMAILJS_TEMPLATE_ID',
+      user_id:     'EMAILJS_PUBLIC_KEY',
+      template_params: {
+        to_email:    S.alertEmail,
+        subject:     `🚨 Offrd API Alert — ${getServiceLabel(service)} failure`,
+        service:     getServiceLabel(service),
+        error_code:  String(errorCode),
+        error_msg:   errorMsg,
+        context:     JSON.stringify(context),
+        timestamp:   new Date().toISOString(),
+        user_tier:   S.tier,
+        app_url:     window.location.href
+      }
+    };
+
+    await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch(e) {
+    // Silently fail — don't cascade errors
+    console.warn('[Offrd Alert] Could not send alert email:', e.message);
+  }
+}
+
+function getServiceLabel(service) {
+  const labels = {
+    anthropic_parse:  'AI Resume Parser',
+    anthropic_score:  'AI Job Scorer',
+    anthropic_tailor: 'AI Resume Tailor',
+    anthropic_cover:  'AI Cover Letter',
+    jsearch:          'Job Search (JSearch)',
+    adzuna:           'Job Search (Adzuna)',
+    supabase:         'Authentication'
+  };
+  return labels[service] || service;
+}
+
+function showUpgradeWall(reason) {
+  const titleEl = document.getElementById('upgradeTitle');
+  const msgEl = document.getElementById('upgradeMsg');
+  const iconEl = document.getElementById('upgradeIcon');
+  if (reason === 'tailors') {
+    if (titleEl) titleEl.textContent = "You've used your free resume tailors";
+    if (msgEl) msgEl.textContent = "Upgrade to get more AI-powered resume tailoring variants optimised for each job you apply to.";
+    if (iconEl) iconEl.textContent = '✦';
+  } else if (reason === 'coverLetter') {
+    if (titleEl) titleEl.textContent = "Cover letters are a paid feature";
+    if (msgEl) msgEl.textContent = "Upgrade to generate personalised, job-specific cover letters in 4 tones — professional, confident, conversational or concise. Ready to send in seconds.";
+    if (iconEl) iconEl.textContent = '✉';
+  } else {
+    if (titleEl) titleEl.textContent = "You've used your free searches";
+    if (msgEl) msgEl.textContent = "You've experienced Offrd's AI-driven job matching. Upgrade to continue your job search with more searches per month.";
+    if (iconEl) iconEl.textContent = '🚀';
+  }
+  document.getElementById('limitBanner').style.display = 'flex';
 }
 
 function updateTierBadge() {
