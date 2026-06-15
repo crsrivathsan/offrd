@@ -2024,7 +2024,7 @@ Rules: bullet points use "• " prefix. Content strings use \n for newlines. No 
     const res = await fetch(`${S.apiBase}/api/tailor`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 8000, system: 'Return ONLY valid JSON. No markdown fences.
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 8000, system: 'Return ONLY valid JSON. No markdown fences. No preamble. Ensure JSON is complete and properly closed.', messages: [{ role: 'user', content: prompt }] })
     });
 
     const data = await res.json();
