@@ -1224,9 +1224,9 @@ async function parseResume() {
       messages.push({ role: 'user', content: `Extract and return ONLY a JSON object (no markdown) with these fields: name, currentTitle, yearsExperience (number), experienceLevel (entry/mid/senior/director), topSkills (array max 12), industries (array e.g. Telecom Fintech Automotive), domains (array e.g. Conversational AI Chatbots CX Omnichannel), preferredRoles (array), orSignals (array max 8 — short phrases where ANY ONE matching a job description makes the job relevant, e.g. chatbot customer-experience telecom omnichannel), resumeSummary (2 sentences), suggestedKeywords (array 5 terms).\n\nResume:\n${textArea}` });
     }
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(`${S.apiBase}/api/parse`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': S.anthropicKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, messages })
     });
 
@@ -1438,10 +1438,10 @@ Return ONLY a compact JSON array of ALL the jobs above with scores added. One ob
 No extra whitespace. Close array with ].`;
 
     if (signal.aborted) return;
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(`${S.apiBase}/api/score`, {
       method: 'POST',
       signal,
-      headers: { 'Content-Type': 'application/json', 'x-api-key': S.anthropicKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 8000, system: 'Return ONLY valid JSON arrays. No markdown, no preamble, no trailing commas. Always close the JSON array with ]. Keep each object compact — no multiline formatting.', messages: [{ role: 'user', content: prompt }] })
     });
 
@@ -2021,10 +2021,10 @@ Return ONLY this JSON (no markdown). Be concise — each variant's sections cont
 
 Rules: bullet points use "• " prefix. Content strings use \n for newlines. No trailing commas. Close all braces.`;
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(`${S.apiBase}/api/tailor`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': S.anthropicKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 8000, system: 'Return ONLY valid JSON. No markdown fences. No preamble. Ensure JSON is complete and properly closed.', messages: [{ role: 'user', content: prompt }] })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 8000, system: 'Return ONLY valid JSON. No markdown fences.
     });
 
     const data = await res.json();
