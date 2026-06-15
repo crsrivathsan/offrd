@@ -1058,8 +1058,8 @@ const S = {
 
 // ─── Init ─────────────────────────────────────────────────────────────
 (function init() {
-  S.anthropicKey = 'EMBED_ANTHROPIC_KEY';
-  S.jsearchKey = 'EMBED_JSEARCH_KEY';
+  S.anthropicKey = localStorage.getItem('jmp_anthropic') || '';
+  S.jsearchKey = localStorage.getItem('jmp_jsearch') || '';
   S.jsearchSource = 'openwebninja'; localStorage.setItem('jmp_jsearch_source', 'openwebninja'); // locked to OWN
   const pipe = localStorage.getItem('jmp_pipeline');
   if (pipe) S.pipeline = JSON.parse(pipe);
@@ -1158,7 +1158,8 @@ function goToStep(n) {
   [1,2,3,4].forEach(i => {
     const s = document.getElementById(`step${i}`);
     const ind = document.getElementById(`step${i}-indicator`);
-    if (s) s.style.display = i === n ? 'block' : 'none';
+    // Keep step1 visible on step2 so parsed profile stays shown
+    if (s) s.style.display = (i === n || (i === 1 && n === 2)) ? 'block' : 'none';
     if (ind) {
       ind.classList.remove('active','done');
       if (i === n) ind.classList.add('active');
@@ -1244,7 +1245,7 @@ async function parseResume() {
     const expMap = { entry: 'entry', mid: 'mid', senior: 'senior', director: 'director' };
     document.getElementById('searchExp').value = expMap[S.parsedProfile.experienceLevel] || '';
 
-    setTimeout(() => goToStep(2), 1200);
+    // Don't auto-advance — user clicks the button at bottom of parsed profile
 
   } catch (err) {
     hideProgress('parseStatus');
