@@ -1058,8 +1058,8 @@ const S = {
 
 // ─── Init ─────────────────────────────────────────────────────────────
 (function init() {
-  S.anthropicKey = localStorage.getItem('jmp_anthropic') || '';
-  S.jsearchKey = localStorage.getItem('jmp_jsearch') || '';
+  S.anthropicKey = 'WORKER_MANAGED';
+  S.jsearchKey = 'WORKER_MANAGED';
   S.jsearchSource = 'openwebninja'; localStorage.setItem('jmp_jsearch_source', 'openwebninja'); // locked to OWN
   const pipe = localStorage.getItem('jmp_pipeline');
   if (pipe) S.pipeline = JSON.parse(pipe);
@@ -1327,8 +1327,7 @@ function updateWeights() {
 async function runJobSearch() {
   const keywords = document.getElementById('searchKeywords').value.trim();
   if (!keywords) { alert('Please enter job keywords.'); return; }
-  if (!S.anthropicKey) { openSettings(); return; }
-
+// keys managed server-side
   const boards = getActiveBoards();
   if (!boards.length) { alert('Select at least one job board.'); return; }
 
@@ -1959,7 +1958,7 @@ async function openTailor(jobId) {
   const job = S.jobs.find(j => j.id === jobId);
   if (!job) return;
   if (!S.resumeText && !S.resumeBase64) { alert('No resume found. Please go back to step 1.'); return; }
-  if (!S.anthropicKey) { openSettings(); return; }
+  // keys managed server-side
 
   const panel = document.getElementById('sidePanel');
   panel.style.display = 'block';
