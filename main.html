@@ -1584,10 +1584,9 @@ async function fetchJSearchPage(query, num, boardSource, signal) {
   const countryCode = _sel ? _sel.value : 'us';
   const params = new URLSearchParams({ query, page: '1', num_pages: '1', date_posted: 'month', country: countryCode, language: 'en' });
 
-  const res = await fetch(`${getJSearchURL()}?${params}`, {
+  const res = await fetch(`${S.apiBase}/api/search?${params}&source=jsearch`, {
     method: 'GET',
-    signal,
-    headers: { 'x-api-key': S.jsearchKey }
+    signal
   });
 
   if (res.status === 403 || res.status === 401) {
