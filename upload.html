@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<!-- Google Analytics 4 — Consent Mode v2 -->
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('consent', 'default', {
+    analytics_storage: 'denied', ad_storage: 'denied',
+    ad_user_data: 'denied', ad_personalization: 'denied',
+    functionality_storage: 'granted', security_storage: 'granted',
+    wait_for_update: 2000
+  });
+  gtag('set', 'anonymize_ip', true);
+
+  function offrdTrack(eventName, params = {}) {
+    if (typeof gtag === 'undefined') return;
+    const user = JSON.parse(sessionStorage.getItem('offrd_user') || '{}');
+    gtag('event', eventName, {
+      app_name: 'Offrd',
+      user_id_hash: user.id ? user.id.slice(0,8) : 'anon',
+      ...params
+    });
+  }
+
+  function loadGA4() {
+    if (document.getElementById('ga4-script')) return;
+    const stored = localStorage.getItem('offrd_consent');
+    if (stored !== 'granted') return;
+    gtag('consent', 'update', { analytics_storage: 'granted', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
+    const s = document.createElement('script');
+    s.id = 'ga4-script'; s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=G-H4VM6CR2N1';
+    document.head.appendChild(s);
+    s.onload = () => gtag('config', 'G-H4VM6CR2N1', { anonymize_ip: true });
+  }
+  loadGA4();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Offrd — Upload Resume</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="offrd-shared.css"/>
+</head>
+<body>
+<div class="app">
+
+<nav>
+  <a href="/" style="text-decoration:none;display:flex;align-items:center;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 52" height="32" role="img" aria-label="Offrd">
+      <rect x="0" y="0" width="48" height="48" rx="10" fill="#f97316"/>
+      <polyline points="8,39 8,19 15,25 24,10 33,25 40,19 40,39" fill="white" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+      <rect x="6" y="38" width="36" height="6" rx="2" fill="white"/>
+      <circle cx="8" cy="18" r="3" fill="#1a2333"/><circle cx="24" cy="9" r="3.8" fill="#1a2333"/><circle cx="40" cy="18" r="3" fill="#1a2333"/>
+      <circle cx="8" cy="18" r="1.5" fill="white"/><circle cx="24" cy="9" r="1.9" fill="white"/><circle cx="40" cy="18" r="1.5" fill="white"/>
+      <text x="58" y="33" font-family="Syne,sans-serif" font-weight="800" font-size="24" fill="white" letter-spacing="-1">Offrd</text>
+      <circle cx="138" cy="19" r="4.5" fill="white"/>
+    </svg>
+  </a>
+  <div class="nav-right" style="gap:8px;">
+    <div class="nav-tabs">
+      <button class="nav-tab active">Search</button>
+      <button class="nav-tab" onclick="offrdNavigate('results.html?tab=pipeline')">Pipeline <span id="pipelineBadge" style="display:none;background:var(--accent);color:#fff;font-size:9px;padding:1px 5px;border-radius:99px;margin-left:3px;"></span></button>
+      <button class="nav-tab" onclick="offrdNavigate('results.html?tab=history')">History</button>
+    </div>
+    <span id="apiStatus" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;"></span>
+    <span id="nav-user-name" style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace;display:none;"></span>
+    <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme">☀</button>
+    <button class="btn-ghost" onclick="openHelp()">? Help</button>
+    <button class="btn-ghost" onclick="openAbout()">ℹ About</button>
+    <button class="btn-ghost" id="logoutBtn" onclick="logoutUser()" style="display:none;color:var(--red,#f87171);border-color:rgba(248,113,113,0.3);" title="Sign out">⏻ Sign out</button>
+  </div>
+</nav>
+
+<!-- Help Modal -->
+<div class="modal-overlay" id="helpModal">
+  <div class="modal-lg">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+      <div>
+        <div class="modal-title">Help &amp; Setup Guide</div>
+        <div class="modal-sub">Get Offrd for your next role in minutes</div>
+      </div>
+      <button class="panel-close" onclick="closeHelp()" style="font-size:20px;padding:4px;">✕</button>
+    </div>
+
+    <div class="help-section-title">Getting started</div>
+    <div class="help-step">
+      <div class="help-step-num">1</div>
+      <div class="help-step-body">
+        <h4>Offrd is ready to use</h4>
+        <p>No setup needed — sign in and start searching. Offrd handles everything behind the scenes, including job search and AI matching.</p>
+      </div>
+    </div>
+
+    <div class="help-section-title">How to use the app</div>
+    <div class="help-step">
+      <div class="help-step-num">2</div>
+      <div class="help-step-body">
+        <h4>Upload your resume</h4>
+        <p>Drag and drop your PDF or DOCX resume onto the upload zone — or paste the text directly. Our AI extracts your name, skills, experience level, and suggests job search keywords automatically.</p>
+      </div>
+    </div>
+    <div class="help-step">
+      <div class="help-step-num">3</div>
+      <div class="help-step-body">
+        <h4>Configure your job search</h4>
+        <p>Refine the pre-filled keywords, select your target country, set experience level and job type. Toggle which job boards to search and adjust the ranking priority sliders to weight what matters most to you.</p>
+      </div>
+    </div>
+    <div class="help-step">
+      <div class="help-step-num">4</div>
+      <div class="help-step-body">
+        <h4>Review matches &amp; take action</h4>
+        <p>Jobs are ranked with a 0–100 match score broken down by Relevancy, Seniority Fit, Low Competition, and Salary Match. Click any job to see the skill gap chart and salary context. Use <strong style="color:var(--text);">✦ Tailor Resume</strong> to get an AI-rewritten resume, or <strong style="color:var(--text);">✉ Cover Letter</strong> for a tailored cover letter. Save interesting jobs to your <strong style="color:var(--text);">Pipeline</strong> board to track applications.</p>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeHelp()">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- About Modal -->
+<div class="modal-overlay" id="aboutModal">
+  <div class="modal-lg" style="width:560px;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+      <button class="panel-close" onclick="closeAbout()" style="font-size:20px;padding:4px;">✕</button>
+    </div>
+    <div class="about-hero">
+      <div style="font-size:32px;margin-bottom:10px;">🎯</div>
+      <div style="display:flex;align-items:center;justify-content:center;margin-bottom:8px;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 52" height="36" role="img" aria-label="Offrd">
+          <rect x="0" y="0" width="48" height="48" rx="10" fill="#1a2333"/>
+          <polyline points="8,39 8,19 15,25 24,10 33,25 40,19 40,39" fill="#f97316" stroke="#f97316" stroke-width="1.5" stroke-linejoin="round"/>
+          <rect x="6" y="38" width="36" height="6" rx="2" fill="#f97316"/>
+          <circle cx="8" cy="18" r="3" fill="white"/><circle cx="24" cy="9" r="3.8" fill="white"/><circle cx="40" cy="18" r="3" fill="white"/>
+          <circle cx="8" cy="18" r="1.5" fill="#f97316"/><circle cx="24" cy="9" r="1.9" fill="#f97316"/><circle cx="40" cy="18" r="1.5" fill="#f97316"/>
+          <text x="58" y="33" font-family="Syne,sans-serif" font-weight="800" font-size="24" fill="#1a2333" letter-spacing="-1">Offrd</text>
+          <circle cx="138" cy="19" r="4.5" fill="#f97316"/>
+        </svg>
+      </div>
+      <p class="about-tagline">An AI-powered job search assistant that finds live listings across the world's top job boards, scores them against your resume, and helps you apply with a tailored, ATS-optimised resume — all in one place.</p>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+        <span style="background:var(--green-dim);border:1px solid rgba(34,197,94,0.25);border-radius:99px;padding:4px 14px;font-size:11px;color:var(--green);font-weight:600;">● Live Job Search</span>
+        <span style="background:var(--accent-dim);border:1px solid rgba(108,99,255,0.25);border-radius:99px;padding:4px 14px;font-size:11px;color:var(--accent2);font-weight:600;">✦ AI Resume Tailoring</span>
+        <span style="background:var(--cyan-dim);border:1px solid rgba(34,211,238,0.2);border-radius:99px;padding:4px 14px;font-size:11px;color:var(--cyan);font-weight:600;">📊 Match Scoring</span>
+      </div>
+    </div>
+    <div class="about-feature-grid">
+      <div class="about-feature"><div class="about-feature-icon">📄</div><h5>Resume Intelligence</h5><p>Offrd reads your resume and extracts skills, experience level, and keywords to personalise every search.</p></div>
+      <div class="about-feature"><div class="about-feature-icon">🔍</div><h5>Multi-Board Search</h5><p>Fetches real-time listings from LinkedIn, Indeed, Glassdoor, Naukri and more.</p></div>
+      <div class="about-feature"><div class="about-feature-icon">🎯</div><h5>Smart Match Scoring</h5><p>Every job is scored across relevancy, seniority fit, applicant competition, and salary match.</p></div>
+      <div class="about-feature"><div class="about-feature-icon">✦</div><h5>Tailored Resume Export</h5><p>Get your resume rewritten for any job and download it instantly as PDF or DOCX.</p></div>
+      <div class="about-feature"><div class="about-feature-icon">📋</div><h5>Application Pipeline</h5><p>Track every application from Saved through to Offer with a Kanban-style board.</p></div>
+      <div class="about-feature"><div class="about-feature-icon">🕐</div><h5>Search History</h5><p>Re-run any of your last 5 searches in one click.</p></div>
+    </div>
+    <div class="about-credit">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;">How Offrd came to be</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;text-align:left;margin-bottom:16px;">The origin story is less "garage startup" and more "one too many tabs open at 1am." Picture six browser tabs, three different job boards, a resume that needed a different version for every single application, and the slow realisation that "tailoring your resume" mostly means copy-pasting the same bullet points and hoping nobody notices. After the fortieth tab, a simple thought emerged: what if one tool just did all of this — and didn't charge for the privilege, spam your phone, or sell your data to the highest bidder? Offrd was the answer to that very tired, very caffeinated question.</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;">How to use it</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;text-align:left;">Upload or paste your resume, then let Offrd analyse it and search live job boards on your behalf. Review AI-scored matches, tailor your resume for any role in one click, and track every application through the pipeline — from saved to offer.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeAbout()">Close</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div id="onboardWrap" class="onboard-wrap">
+    <div class="onboard-title">Getting started</div>
+    <div class="onboard-steps">
+      <div class="onboard-item" id="ob1"><div class="onboard-check">1</div><span>Upload resume</span></div>
+      <div class="onboard-item" id="ob2"><div class="onboard-check">2</div><span>Search boards</span></div>
+      <div class="onboard-item" id="ob3"><div class="onboard-check">3</div><span>Apply to a job</span></div>
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step active" id="step1-indicator"><div class="step-num">1</div><span>Upload Resume</span></div>
+    <div class="step-line"></div>
+    <div class="step" id="step2-indicator"><div class="step-num">2</div><span>Search Jobs</span></div>
+    <div class="step-line"></div>
+    <div class="step" id="step3-indicator"><div class="step-num">3</div><span>Review Matches</span></div>
+  </div>
+
+  <div id="step1" class="fade-in">
+    <div class="section-title">Upload your resume</div>
+    <div class="section-sub">Our AI will extract your skills, experience, and role preferences to match you with the best jobs.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="upload-layout">
+      <div>
+        <div class="upload-zone" id="uploadZone">
+          <input type="file" id="resumeFile" accept=".pdf,.doc,.docx,.txt" onchange="handleFileSelect(event)" />
+          <span class="upload-icon">📄</span>
+          <h3>Drop your resume here</h3>
+          <p>PDF, DOCX or TXT · Max 10MB</p>
+          <div id="fileChip" style="display:none;"></div>
+        </div>
+        <div style="margin-top:14px;text-align:center;font-size:12px;color:var(--text3);">— or paste resume text —</div>
+        <div style="margin-top:10px;">
+          <textarea id="resumeText" placeholder="Paste your resume content here..." style="min-height:120px;"></textarea>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" style="height:100%;">
+          <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:14px;">What happens next</div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="display:flex;gap:12px;align-items:flex-start;">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-dim);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--accent2);flex-shrink:0;">1</div>
+              <div><div style="font-size:13px;font-weight:600;margin-bottom:2px;">Offrd analyses your resume</div><div style="font-size:11px;color:var(--text2);">Extracts skills, experience level, job titles, and preferences</div></div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start;">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-dim);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--accent2);flex-shrink:0;">2</div>
+              <div><div style="font-size:13px;font-weight:600;margin-bottom:2px;">Offrd fetches live jobs</div><div style="font-size:11px;color:var(--text2);">Real-time listings — LinkedIn, Indeed, Glassdoor & more</div></div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start;">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-dim);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--accent2);flex-shrink:0;">3</div>
+              <div><div style="font-size:13px;font-weight:600;margin-bottom:2px;">Offrd scores every job</div><div style="font-size:11px;color:var(--text2);">Ranked by relevancy, seniority fit & applicant volume</div></div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start;">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-dim);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--accent2);flex-shrink:0;">4</div>
+              <div><div style="font-size:13px;font-weight:600;margin-bottom:2px;">Apply with a tailored resume</div><div style="font-size:11px;color:var(--text2);">Get your resume rewritten to match any job in one click</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="parseStatus" style="display:none;margin-top:16px;"></div>
+    <div id="parsedProfile" style="display:none;margin-top:16px;"></div>
+
+    <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px;">
+      <button class="btn-primary" onclick="parseResume()" id="parseBtn">Analyse Resume with AI →</button>
+      <button class="btn-primary" onclick="offrdNavigate('search.html')" id="proceedBtn" style="display:none;">Proceed to job search →</button>
+    </div>
+  </div>
+</main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.2/mammoth.browser.min.js" defer></script>
+<script src="offrd-app.js"></script>
+<script>
+function handleFileSelect(e) { const f = e.target.files[0]; if (f) processFile(f); }
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+function processFile(file) {
+  document.getElementById('fileChip').style.display = 'flex';
+  document.getElementById('fileChip').innerHTML = `<span>📎</span><span>${file.name}</span>`;
+  S.resumeFileName = file.name;
+
+  if (file.type === 'text/plain') {
+    const reader = new FileReader();
+    reader.onload = (e) => { document.getElementById('resumeText').value = e.target.result; };
+    reader.readAsText(file);
+    return;
+  }
+
+  if (file.name.toLowerCase().endsWith('.doc') && !file.name.toLowerCase().endsWith('.docx')) {
+    showParseStatus("⚠ Old .doc files aren't supported — please save as .docx or .pdf, or paste your resume text below.", 'warn');
+    return;
+  }
+
+  if (file.type === DOCX_MIME || file.name.toLowerCase().endsWith('.docx')) {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        if (!window.mammoth) { await new Promise(r => setTimeout(r, 600)); }
+        if (!window.mammoth) throw new Error('Document reader still loading — please try again in a moment.');
+        const result = await window.mammoth.extractRawText({ arrayBuffer: e.target.result });
+        S.resumeText = result.value || '';
+        S.resumeBase64 = null;
+        S.resumeMime = null;
+        document.getElementById('resumeText').value = S.resumeText;
+        if (!S.resumeText.trim()) {
+          showParseStatus('⚠ Could not read text from this .docx file. Try pasting your resume text instead.', 'warn');
+        }
+      } catch (err) {
+        showParseStatus(`⚠ Could not read this .docx file (${err.message}). Try pasting your resume text instead.`, 'warn');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    S.resumeBase64 = e.target.result.split(',')[1];
+    S.resumeMime = file.type || 'application/pdf';
+    S.resumeText = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function parseResume() {
+  const textArea = document.getElementById('resumeText').value.trim();
+  if (!textArea && !S.resumeBase64) {
+    showParseStatus('⚠ Please upload a resume file or paste resume text first.', 'warn');
+    return;
+  }
+
+  const btn = document.getElementById('parseBtn');
+  btn.style.display = 'inline-flex';
+  btn.disabled = true;
+  btn.textContent = 'Parsing…';
+  document.getElementById('proceedBtn').style.display = 'none';
+  showParseStatus('', '');
+
+  const parseStages = [
+    { label: 'Reading resume file', pct: 20 },
+    { label: 'Extracting skills & experience', pct: 55 },
+    { label: 'Building candidate profile', pct: 80 },
+    { label: 'Finalising results', pct: 95 }
+  ];
+  showProgress('parseStatus', parseStages, 0);
+
+  try {
+    const messages = [];
+    if (S.resumeBase64) {
+      messages.push({
+        role: 'user',
+        content: [
+          { type: 'document', source: { type: 'base64', media_type: S.resumeMime, data: S.resumeBase64 } },
+          { type: 'text', text: 'You are a precise resume parser. Extract and return ONLY a JSON object (no markdown, no extra text).\n\nABSOLUTE RULES — violations are unacceptable:\n1. ONLY extract facts LITERALLY written in this document. Zero exceptions.\n2. NEVER infer, assume, or hallucinate ANY employer, company, job title, date, skill, or achievement not explicitly written.\n3. If a company name does not appear verbatim in the Work Experience section, it MUST NOT appear in your output.\n4. Do not use your training knowledge to fill gaps. If it is not in the document, leave it out.\n5. employers array: list ONLY the exact company names written under Work Experience — nothing else.\n\nFields:\n- name (string): full name from document\n- currentTitle (string): exact job title of most recent role as written\n- searchTitle (string): a short, generic 2-3 word job title for searching job boards, e.g. "Product Manager" or "Web Developer" — strip seniority words, specializations, and company-specific terms from currentTitle to get this\n- yearsExperience (number): calculate only from dates explicitly written\n- experienceLevel (entry/mid/senior/director)\n- employers (array): VERBATIM company names from Work Experience section only\n- topSkills (array, max 12): only skills explicitly listed in document\n- industries (array): only industries explicitly mentioned\n- domains (array): functional domains explicitly mentioned\n- preferredRoles (array): roles that match document content\n- orSignals (array, max 8): short keyword phrases from document for job matching\n- resumeSummary (2 sentences using only facts from document)\n- suggestedKeywords (array, 5 terms from document)' }
+        ]
+      });
+    } else {
+      messages.push({ role: 'user', content: `You are a precise resume parser. Extract and return ONLY a JSON object (no markdown, no extra text).
+
+ABSOLUTE RULES — violations are unacceptable:
+1. ONLY extract facts LITERALLY written in the resume text below. Zero exceptions.
+2. NEVER infer, assume, or hallucinate ANY employer, company, job title, date, skill, or achievement not explicitly written.
+3. employers array: list ONLY the exact company names written under Work Experience — nothing else.
+4. Do not use your training knowledge to fill gaps. If it is not in the text, leave it out.
+
+Fields: name, currentTitle (exact title from most recent role as written), searchTitle (short generic 2-3 word job title for searching job boards, e.g. "Product Manager" or "Web Developer" — strip seniority words, specializations, and company-specific terms from currentTitle to get this), yearsExperience (number, from dates only), experienceLevel (entry/mid/senior/director), employers (array of VERBATIM company names from Work Experience only), topSkills (array max 12, explicitly listed only), industries (array, explicitly mentioned only), domains (array, explicitly mentioned only), preferredRoles (array), orSignals (array max 8, short keyword phrases from document), resumeSummary (2 sentences using only document facts), suggestedKeywords (array 5 terms from document).
+
+Resume:
+${textArea}` });
+    }
+
+    const res = await fetch(S.apiBase + '/api/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, messages })
+    });
+
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+    S.parsedProfile = JSON.parse(raw);
+    // Note: S.resumeText (DOCX/pasted text) and S.resumeBase64 (PDF) are
+    // already set correctly by processFile() — don't overwrite either here.
+
+    hideProgress('parseStatus');
+    renderParsedProfile(S.parsedProfile);
+    persistState();
+
+    btn.style.display = 'none';
+    document.getElementById('proceedBtn').style.display = 'inline-flex';
+    return;
+
+  } catch (err) {
+    hideProgress('parseStatus');
+    showParseStatus('✕ Error: ' + err.message, 'warn');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Analyse Resume with AI →';
+}
+
+function showParseStatus(msg, type) {
+  const el = document.getElementById('parseStatus');
+  if (!msg) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = `<div class="alert alert-${type === 'warn' ? 'warn' : 'info'}">${msg}</div>`;
+}
+
+function renderParsedProfile(p) {
+  const el = document.getElementById('parsedProfile');
+  el.style.display = 'block';
+  const tag = (txt, bg, border, color) =>
+    '<span style="background:' + bg + ';border:1px solid ' + border + ';border-radius:99px;padding:3px 10px;font-size:11px;color:' + color + ';">' + txt + '</span>';
+  let html = '<div class="alert alert-success">✓ Resume parsed successfully</div>';
+  html += '<div class="card fade-in">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">';
+  html += '<div>';
+  html += '<div style="font-size:16px;font-weight:800;">' + (p.name || 'Your Profile') + '</div>';
+  html += '<div style="font-size:12px;color:var(--text2);">' + (p.currentTitle || '') + ' · ' + (p.yearsExperience || '?') + ' years exp · <span style="text-transform:capitalize;">' + (p.experienceLevel || '') + '</span></div>';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:var(--text3);font-family:DM Mono,monospace;">' + ((p.experienceLevel || '').toUpperCase()) + '</div>';
+  html += '</div>';
+  html += '<div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;">' + (p.resumeSummary || '') + '</div>';
+  if ((p.topSkills || []).length) {
+    html += '<div style="margin-bottom:10px;">';
+    html += '<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px;">Top Skills</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + (p.topSkills || []).map(s => tag(s, 'var(--accent-dim)', 'rgba(108,99,255,0.25)', 'var(--accent2)')).join('') + '</div>';
+    html += '</div>';
+  }
+  if ((p.domains || []).length) {
+    html += '<div style="margin-bottom:10px;">';
+    html += '<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px;">Domains</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + (p.domains || []).map(s => tag(s, 'var(--cyan-dim)', 'rgba(34,211,238,0.2)', 'var(--cyan)')).join('') + '</div>';
+    html += '</div>';
+  }
+  if ((p.orSignals || []).length) {
+    html += '<div style="margin-bottom:10px;">';
+    html += '<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px;">OR-Match Signals <span style="font-size:9px;font-weight:400;">(any one = relevant)</span></div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + (p.orSignals || []).map(s => tag(s, 'var(--green-dim)', 'rgba(34,197,94,0.2)', 'var(--green)')).join('') + '</div>';
+    html += '</div>';
+  }
+  if ((p.suggestedKeywords || []).length) {
+    html += '<div>';
+    html += '<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px;">Search Keywords</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + (p.suggestedKeywords || []).map(s => tag(s, 'var(--bg4)', 'var(--border2)', 'var(--text2)')).join('') + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+(function initUploadPage() {
+  if (!requireAuth()) return;
+
+  loadState();
+  offrdSharedInit();
+
+  if (S.parsedProfile) renderParsedProfile(S.parsedProfile);
+  if (S.resumeText) document.getElementById('resumeText').value = S.resumeText;
+  if (S.resumeFileName) {
+    document.getElementById('fileChip').style.display = 'flex';
+    document.getElementById('fileChip').innerHTML = `<span>📎</span><span>${S.resumeFileName}</span>`;
+  }
+
+  const uz = document.getElementById('uploadZone');
+  uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('drag'); });
+  uz.addEventListener('dragleave', () => uz.classList.remove('drag'));
+  uz.addEventListener('drop', e => { e.preventDefault(); uz.classList.remove('drag'); const f = e.dataTransfer.files[0]; if (f) processFile(f); });
+})();
+</script>
+</body>
+</html>
