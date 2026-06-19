@@ -1,0 +1,34 @@
+name = "offrd-api"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ALLOWED_ORIGIN = "https://offrd.net"
+
+# ── Secrets (set via CLI — never stored in this file) ──
+# Run these commands after deploying:
+#
+#   npx wrangler secret put ANTHROPIC_KEY
+#   npx wrangler secret put JSEARCH_KEY
+#   npx wrangler secret put ADZUNA_APP_ID
+#   npx wrangler secret put ADZUNA_APP_KEY
+#   npx wrangler secret put SUPABASE_URL
+#   npx wrangler secret put SUPABASE_SERVICE_KEY
+#
+# SUPABASE_URL is your project URL, e.g. https://pfxbuqiqwpryvmrvrgfp.supabase.co
+# SUPABASE_SERVICE_KEY is the service_role key — Supabase dashboard →
+# Settings → API → Project API keys → service_role (NOT the anon/public key).
+# This key bypasses Row Level Security, which is required so the Worker can
+# read and increment search_count for any user server-side. Never expose
+# this key to the browser.
+#
+# Or set them in the Cloudflare Dashboard:
+#   Workers → offrd-api → Settings → Variables → Add variable (Secret)
+
+[triggers]
+crons = []
+
+[[routes]]
+pattern = "api.offrd.net/*"
+zone_name = "offrd.net"
