@@ -906,16 +906,17 @@ ABSOLUTE RULES — violations destroy user trust and are unacceptable:
 5. You may ONLY change: wording emphasis, bullet ordering, keyword density, summary framing, skills ordering.
 6. Each variant must be ATS-compliant using keywords from the job description naturally.
 7. NEVER mention the target company name anywhere in the resume — the resume must be generic and reusable. Do not add phrases like 'applying to [Company]' or 'excited to join [Company]' or reference the company by name anywhere in the content.
-8. Return ONLY a valid JSON object — no markdown, no explanation.
+8. Copy every email address, phone number, LinkedIn URL, and other website from the Original Resume EXACTLY as written. Never invent or alter contact details.
+9. Return ONLY a valid JSON object — no markdown, no explanation.
 
 Job: ${job.title} at ${job.company}
 Job Description: ${job.description}
 Fit gap to address: ${job.gapReason || 'N/A'}
-Candidate Profile: ${profileStr.slice(0,300)}
+Candidate Profile: ${profileStr.slice(0,1500)}
 ${S.resumeBase64 ? '' : 'Original Resume:\n' + (S.resumeText || '').slice(0,2000)}
 
 Return ONLY this JSON (no markdown). Be concise — each variant's sections content should be tight strings:
-{"v1":{"label":"Impact-First","summary":"...","sections":[{"heading":"PROFESSIONAL SUMMARY","content":"..."},{"heading":"CORE COMPETENCIES","content":"..."},{"heading":"PROFESSIONAL EXPERIENCE","content":"..."},{"heading":"KEY ACHIEVEMENTS","content":"Outcome | Impact\nGenAI Automation | $8M revenue + $8.5M savings"},{"heading":"EDUCATION","content":"..."},{"heading":"TECHNICAL SKILLS","content":"..."}]},"v2":{"label":"Skills-Forward","summary":"...","sections":[...same headings...]},"v3":{"label":"Narrative-Led","summary":"...","sections":[...]},"v4":{"label":"Concise 1-Page","summary":"...","sections":[...max 3 bullets per role...]},"v5":{"label":"Technical-Deep","summary":"...","sections":[...]}}
+{"contactInfo":{"emails":[],"phones":[],"linkedinUrls":[],"websites":[]},"v1":{"label":"Impact-First","summary":"...","sections":[{"heading":"PROFESSIONAL SUMMARY","content":"..."},{"heading":"CORE COMPETENCIES","content":"..."},{"heading":"PROFESSIONAL EXPERIENCE","content":"..."},{"heading":"KEY ACHIEVEMENTS","content":"Outcome | Impact\nGenAI Automation | $8M revenue + $8.5M savings"},{"heading":"EDUCATION","content":"..."},{"heading":"TECHNICAL SKILLS","content":"..."}]},"v2":{"label":"Skills-Forward","summary":"...","sections":[...same headings...]},"v3":{"label":"Narrative-Led","summary":"...","sections":[...]},"v4":{"label":"Concise 1-Page","summary":"...","sections":[...max 3 bullets per role...]},"v5":{"label":"Technical-Deep","summary":"...","sections":[...]}}
 
 Rules: bullet points use "• " prefix. Content strings use \n for newlines. No trailing commas. Close all braces.`;
 
@@ -973,6 +974,21 @@ Rules: bullet points use "• " prefix. Content strings use \n for newlines. No 
     }
 
     clearInterval(tailorTimer);
+
+    // The parse schema now stores contact details, but a user may still
+    // arrive here with a profile parsed before that schema existed. The
+    // tailoring response sees the original resume too, so use its root-level
+    // contactInfo to upgrade that in-session profile without making the user
+    // upload and analyse the same resume again.
+    if (variants && typeof variants === 'object' && variants.contactInfo) {
+      const mergedContactInfo = normaliseResumeContactInfo(S.parsedProfile, variants.contactInfo);
+      if (getResumeContactParts({ contactInfo: mergedContactInfo }).length) {
+        if (!S.parsedProfile) S.parsedProfile = {};
+        S.parsedProfile.contactInfo = mergedContactInfo;
+        persistState();
+      }
+      delete variants.contactInfo;
+    }
 
     let hallucinationFlags = {};
     if (variants && typeof variants === 'object' && (variants.v1 || variants.v2)) {
@@ -1068,13 +1084,82 @@ function selectVariant(vid, jobId) {
   if (el) el.classList.add('selected');
 }
 
+// Contact details are source facts, not tailored prose. Keep one canonical
+// normaliser/formatter for preview, DOCX, and PDF so every output includes
+// exactly the same values. The legacy aliases let an older cached profile or
+// a slightly different parser response continue to work.
+function normaliseResumeContactInfo(...sources) {
+  const result = { emails: [], phones: [], linkedinUrls: [], websites: [] };
+  const add = (bucket, value) => {
+    const values = Array.isArray(value) ? value : (value ? [value] : []);
+    values.forEach(item => {
+      const text = String(item || '').trim();
+      if (text && !result[bucket].some(existing => existing.toLowerCase() === text.toLowerCase())) {
+        result[bucket].push(text);
+      }
+    });
+  };
+
+  sources.filter(Boolean).forEach(source => {
+    const candidates = source.contactInfo ? [source.contactInfo, source] : [source];
+    candidates.forEach(contact => {
+      add('emails', contact.emails);
+      add('emails', contact.email);
+      add('phones', contact.phones);
+      add('phones', contact.phone);
+      add('linkedinUrls', contact.linkedinUrls);
+      add('linkedinUrls', contact.linkedinUrl);
+      add('linkedinUrls', contact.linkedin);
+      add('websites', contact.websites);
+      add('websites', contact.website);
+      add('websites', contact.portfolioUrl);
+      add('websites', contact.githubUrl);
+    });
+  });
+
+  // LinkedIn sometimes gets returned in both URL buckets. Keep it once, in
+  // the more specific bucket, without rewriting the value itself.
+  const linkedinSet = new Set(result.linkedinUrls.map(value => value.toLowerCase()));
+  result.websites = result.websites.filter(value => !linkedinSet.has(value.toLowerCase()));
+  return result;
+}
+
+function getResumeContactParts(profile = S.parsedProfile) {
+  const contact = normaliseResumeContactInfo(profile);
+  const seen = new Set();
+  return [contact.emails, contact.phones, contact.linkedinUrls, contact.websites]
+    .flat()
+    .filter(value => {
+      const key = value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function getResumeHeadline(profile = S.parsedProfile) {
+  if (!profile) return '';
+  const parts = [];
+  if (profile.currentTitle) parts.push(String(profile.currentTitle).trim());
+  if (profile.yearsExperience !== undefined && profile.yearsExperience !== null && profile.yearsExperience !== '') {
+    parts.push(`${profile.yearsExperience}+ years experience`);
+  }
+  return parts.filter(Boolean).join(' · ');
+}
+
+function escapeResumeHTML(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function buildResumeHTML(variantData, candidateName, accentColor) {
   const name = candidateName || (S.parsedProfile?.name) || 'Resume';
-  const contact = S.parsedProfile ? `${S.parsedProfile.currentTitle || ''} · ${S.parsedProfile.yearsExperience || ''}+ years experience` : '';
+  const contact = getResumeContactParts().join(' · ');
+  const headline = getResumeHeadline();
   const accentStyle = accentColor ? ` style="--resume-accent:${accentColor};"` : '';
   let html = `<div class="resume-doc"${accentStyle}>`;
-  html += `<div class="r-name">${name}</div>`;
-  html += `<div class="r-contact">${contact}</div>`;
+  html += `<div class="r-name">${escapeResumeHTML(name)}</div>`;
+  if (contact) html += `<div class="r-contact">${escapeResumeHTML(contact)}</div>`;
+  if (headline) html += `<div class="r-contact">${escapeResumeHTML(headline)}</div>`;
 
   const sections = variantData.sections || [];
   sections.forEach(sec => {
@@ -1178,11 +1263,13 @@ function downloadVariantDocx(vid, jobId, jobTitle) {
   try {
     const { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle, Table, TableRow, TableCell, WidthType, AlignmentType } = window.docx;
     const name = S.parsedProfile?.name || 'Resume';
-    const contact = S.parsedProfile ? `${S.parsedProfile.currentTitle || ''} | ${S.parsedProfile.yearsExperience || ''}+ years experience` : '';
+    const contact = getResumeContactParts().join(' | ');
+    const headline = getResumeHeadline().replace(/ · /g, ' | ');
     const children = [];
 
     children.push(new Paragraph({ children: [new TextRun({ text: name, bold: true, size: 52, font: 'Calibri', color: BRAND_HEX_D })], alignment: AlignmentType.CENTER, spacing: { after: 60 } }));
-    children.push(new Paragraph({ children: [new TextRun({ text: contact, size: 18, color: '555570', font: 'Calibri' })], alignment: AlignmentType.CENTER, spacing: { after: 40 } }));
+    if (contact) children.push(new Paragraph({ children: [new TextRun({ text: contact, size: 18, color: '555570', font: 'Calibri' })], alignment: AlignmentType.CENTER, spacing: { after: 40 } }));
+    if (headline) children.push(new Paragraph({ children: [new TextRun({ text: headline, size: 18, color: '555570', font: 'Calibri' })], alignment: AlignmentType.CENTER, spacing: { after: 40 } }));
     // A coloured rule under the contact line gives the header the same
     // visual anchor as the PDF's accent band — Word doesn't make a
     // full-width tinted background behind text easy to do safely
@@ -1263,7 +1350,14 @@ function downloadVariantPdf(vid, jobId, jobTitle) {
     const maxW = pageW - ml - mr;
     let y = 0;
     const name = S.parsedProfile?.name || 'Resume';
-    const contactParts = [S.parsedProfile?.currentTitle, S.parsedProfile?.yearsExperience ? `${S.parsedProfile.yearsExperience}+ years` : null].filter(Boolean);
+    const contact = getResumeContactParts().join('   ·   ');
+    const headline = getResumeHeadline();
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+    const contactLines = contact ? doc.splitTextToSize(contact, maxW) : [];
+    const headlineLines = headline ? doc.splitTextToSize(headline, maxW) : [];
+    const headerTextLines = contactLines.length + headlineLines.length;
+    const headerHeight = Math.max(32, 23 + headerTextLines * 4.2);
 
     // Header band: a light tint of the brand colour behind the name,
     // instead of plain text floating on a blank page — gives the
@@ -1273,21 +1367,24 @@ function downloadVariantPdf(vid, jobId, jobTitle) {
     // depending on a less-common code path we can't render-test here.
     const tint = BRAND_RGB.map(c => Math.round(c * 0.06 + 255 * 0.94));
     doc.setFillColor(...tint);
-    doc.rect(0, 0, pageW, 32, 'F');
+    doc.rect(0, 0, pageW, headerHeight, 'F');
     // Thin solid accent rule under the band — the one strong line of
     // brand colour on the page, anchoring everything below it.
     doc.setFillColor(...BRAND_RGB);
-    doc.rect(0, 32, pageW, 1.2, 'F');
+    doc.rect(0, headerHeight, pageW, 1.2, 'F');
 
     y = 14;
     doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.setTextColor(...BRAND_RGB);
     const nw = doc.getTextWidth(name); doc.text(name, (pageW - nw)/2, y); y += 7;
-    if (contactParts.length) {
+    if (headerTextLines) {
       doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(85,85,112);
-      const contact = contactParts.join('   ·   ');
-      const cw = doc.getTextWidth(contact); doc.text(contact, (pageW-cw)/2, y);
+      [...contactLines, ...headlineLines].forEach(line => {
+        const lineWidth = doc.getTextWidth(line);
+        doc.text(line, (pageW-lineWidth)/2, y);
+        y += 4.2;
+      });
     }
-    y = 42;
+    y = headerHeight + 10;
 
     (v.sections || []).forEach(sec => {
       if (y > 264) { doc.addPage(); y = 18; }
