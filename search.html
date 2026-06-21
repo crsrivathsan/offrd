@@ -242,19 +242,15 @@
             <div class="board-toggle on" data-board="indeed" onclick="toggleBoard(this)"><div class="board-dot"></div>Indeed</div>
             <div class="board-toggle on" data-board="naukri" onclick="toggleBoard(this)"><div class="board-dot"></div>Naukri</div>
             <div class="board-toggle on" data-board="glassdoor" onclick="toggleBoard(this)"><div class="board-dot"></div>Glassdoor</div>
-            <div class="board-toggle on" data-board="adzuna" onclick="toggleBoard(this)" title="India + US salary data"><div class="board-dot"></div>More Jobs <span style="font-size:9px;background:var(--accent2,#7c6ef5);color:white;padding:1px 5px;border-radius:4px;margin-left:2px;">+Salary</span></div>
+            <!-- Adzuna temporarily disabled — see ADZUNA_ENABLED flag
+                 below. Rendered "off" and non-interactive rather than
+                 removed, so flipping the flag back on later doesn't
+                 require restoring this markup. -->
+            <div class="board-toggle off" data-board="adzuna" style="opacity:0.45;cursor:not-allowed;" title="Temporarily paused">
+              <div class="board-dot"></div>More Jobs <span style="font-size:9px;background:var(--text3);color:white;padding:1px 5px;border-radius:4px;margin-left:2px;">Paused</span>
+            </div>
           </div>
           <div class="divider"></div>
-          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Results Per Board</div>
-          <div class="input-group" style="margin-bottom:16px;">
-            <select id="resultsPerBoard" style="width:100%;">
-              <option value="10">10 results</option>
-              <option value="20" selected>20 results</option>
-              <option value="30">30 results</option>
-              <option value="40">40 results</option>
-              <option value="50">50 results</option>
-            </select>
-          </div>
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Rank By Priority</div>
           <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
             <label style="display:flex;justify-content:space-between;text-transform:none;letter-spacing:0;color:var(--text2);font-size:12px;">Relevancy<span id="wRelevancy" style="color:var(--accent2);font-family:'DM Mono',monospace;">0%</span></label>
@@ -271,8 +267,18 @@
     <div id="jobStatus" style="display:none;margin-top:16px;"></div>
     <div id="searchStatus" style="display:none;margin-top:16px;"></div>
 
+    <!-- Pagination: 10 jobs per board per page. Hidden until a search
+         has actually run (see updatePaginationControls). Paging again
+         re-queries every active board for that page and re-navigates
+         to results.html, same as a fresh search. -->
+    <div id="paginationControls" style="display:none;margin-top:16px;align-items:center;justify-content:center;gap:14px;">
+      <button class="btn-ghost" id="prevPageBtn" onclick="goToPrevPage()">← Back</button>
+      <span id="pageIndicator" style="font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;min-width:60px;text-align:center;">Page 1</span>
+      <button class="btn-ghost" id="nextPageBtn" onclick="goToNextPage()">Next →</button>
+    </div>
+
     <div style="margin-top:20px;display:flex;justify-content:space-between;align-items:center;">
-      <button class="btn-ghost" onclick="offrdNavigate('upload.html')">← Back</button>
+      <button class="btn-ghost" onclick="offrdNavigate('upload.html')">← Edit resume</button>
       <div style="display:flex;gap:10px;align-items:center;">
         <button class="btn-stop" id="stopBtn" onclick="stopSearch()">■ Stop Search</button>
         <button class="btn-primary" onclick="runJobSearch()" id="searchBtn">Search All Boards →</button>
@@ -285,6 +291,15 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="offrd-app.js"></script>
 <script>
+// ─── Adzuna kill switch ──────────────────────────────────────────────
+// Flip this to true to bring Adzuna back. While false: the board
+// toggle is rendered disabled (see board-grid markup above), History
+// reruns strip 'adzuna' out of restored board lists, and the fetch
+// layer below skips the Adzuna request even if 'adzuna' somehow still
+// ends up in the active boards list. One flag, three guarded points —
+// re-enabling is just switching this back to true.
+const ADZUNA_ENABLED = false;
+
 let _searchAbort = null;
 
 function stopSearch() {
@@ -569,7 +584,19 @@ function mergeJobWithScore(job, enrichment) {
   };
 }
 
-async function runJobSearch() {
+// Builds a stable signature for "is this the same search". Order-
+// independent on boards so toggling them off/on in the same set
+// doesn't falsely look like a new search.
+function buildSearchSignature(keywords, location, boards, countryCode) {
+  return JSON.stringify({
+    k: keywords.trim().toLowerCase(),
+    l: location.trim().toLowerCase(),
+    b: [...boards].sort(),
+    c: countryCode
+  });
+}
+
+async function runJobSearch(targetPage) {
   const keywords = document.getElementById('searchKeywords').value.trim();
   if (!keywords) { alert('Please enter job keywords.'); return; }
 
@@ -591,6 +618,10 @@ async function runJobSearch() {
   const stopBtn = document.getElementById('stopBtn');
   btn.disabled = true; btn.textContent = 'Searching…';
   stopBtn.classList.add('visible');
+  const prevPageBtnEl = document.getElementById('prevPageBtn');
+  const nextPageBtnEl = document.getElementById('nextPageBtn');
+  if (prevPageBtnEl) prevPageBtnEl.disabled = true;
+  if (nextPageBtnEl) nextPageBtnEl.disabled = true;
 
   const countrySelectEl = document.getElementById('countrySelect');
   const countryName = countrySelectEl ? countrySelectEl.options[countrySelectEl.selectedIndex].text : 'United States';
@@ -603,11 +634,21 @@ async function runJobSearch() {
   // nothing for a person looking specifically in a city like Chennai.
   const location = cityVal ? `${cityVal}, ${countryName}` : countryName;
   const salary = getSalaryString();
-  // Fixed per-board fetch count — not user-adjustable. 20 per board
-  // gives a reasonable total across several boards (e.g. 80-100 with
-  // 4-5 active) without exposing a control that could be cranked up
-  // and quietly multiply API/AI cost per search.
-  const count = parseInt(document.getElementById('resultsPerBoard')?.value || '20');
+  // Fixed per-board fetch count — 10 per board per page. Getting more
+  // than 10 is now a Next click (true pagination) rather than asking
+  // for a bigger one-shot batch, which keeps API cost per click low
+  // and predictable.
+  const count = 10;
+
+  // Which page are we fetching? An explicit targetPage (only ever
+  // passed by goToNextPage/goToPrevPage, or a History rerun forcing
+  // page 1) is authoritative. The main "Search All Boards" button
+  // always means page 1 — re-running a search is a fresh look, not a
+  // request to silently resume page 3. Signature is still recorded so
+  // a *subsequent* Next click knows what it's paging from.
+  const countryCode = countrySelectEl?.value || 'us';
+  const signature = buildSearchSignature(keywords, location, boards, countryCode);
+  const page = targetPage || 1;
 
   const statusEl = document.getElementById('searchStatus');
   statusEl.style.display = 'block';
@@ -626,22 +667,37 @@ async function runJobSearch() {
   try {
     S.isLiveData = false;
 
-    const realJobs = await fetchApifyJobs(boards, keywords, location, count, signal);
+    const realJobs = await fetchApifyJobs(boards, keywords, location, count, signal, page);
     if (signal.aborted) return;
 
     if (realJobs.length === 0) {
       hideProgress('searchStatus');
       document.getElementById('searchStatus').style.display = 'block';
-      document.getElementById('searchStatus').innerHTML = `
-        <div class="alert alert-warn" style="font-size:13px;line-height:1.8;">
-          <strong>⚠ No jobs found</strong><br>
-          Offrd couldn't find any live jobs for your search right now. This usually means:<br>
-          • No jobs currently match your exact keywords + location combination<br>
-          • The search hit a temporary rate limit — try again in a minute<br><br>
-          <strong>Try:</strong> Broader keywords (e.g. "Product Manager" instead of a very specific title), or a different location.
-        </div>`;
+      // Distinguish "no results on this page" (ran out via Next) from
+      // a genuinely empty first search — the fix is different (go
+      // Back vs try broader keywords).
+      if (page > 1) {
+        document.getElementById('searchStatus').innerHTML = `
+          <div class="alert alert-warn" style="font-size:13px;line-height:1.8;">
+            <strong>⚠ No more jobs</strong><br>
+            That's the end of the results for this search. Use ← Back to see the previous page.
+          </div>`;
+        S.searchPagination = { signature, page: Math.max(1, page - 1), hasMore: false };
+        persistState();
+        updatePaginationControls();
+      } else {
+        document.getElementById('searchStatus').innerHTML = `
+          <div class="alert alert-warn" style="font-size:13px;line-height:1.8;">
+            <strong>⚠ No jobs found</strong><br>
+            Offrd couldn't find any live jobs for your search right now. This usually means:<br>
+            • No jobs currently match your exact keywords + location combination<br>
+            • The search hit a temporary rate limit — try again in a minute<br><br>
+            <strong>Try:</strong> Broader keywords (e.g. "Product Manager" instead of a very specific title), or a different location.
+          </div>`;
+      }
       stopBtn.classList.remove('visible');
       btn.disabled = false; btn.textContent = 'Search All Boards →';
+      updatePaginationControls();
       return;
     }
 
@@ -678,12 +734,18 @@ async function runJobSearch() {
     hideProgress('searchStatus');
     updateJobStatus(`✓ ${S.jobs.length} unique jobs ranked`, 'success');
 
+    // Record where we ended up so Next/Back and a later re-run of the
+    // same search know what page to resume from.
+    S.searchPagination = { signature, page, hasMore: true };
+    updatePaginationControls();
+
     saveSearchToHistory(keywords, location, boards, S.jobs.length, countrySelectEl?.value, cityVal, count);
     offrdTrack('job_search_complete', {
       total_jobs: S.jobs.length,
       keywords: keywords,
       country: location,
-      avg_score: S.jobs.length ? Math.round(S.jobs.reduce((a,j) => a + (j.scores?.overall||0), 0) / S.jobs.length) : 0
+      avg_score: S.jobs.length ? Math.round(S.jobs.reduce((a,j) => a + (j.scores?.overall||0), 0) / S.jobs.length) : 0,
+      page: page
     });
     updateOnboarding();
     persistState();
@@ -698,6 +760,62 @@ async function runJobSearch() {
   }
 
   btn.disabled = false; btn.textContent = 'Search All Boards →';
+  updatePaginationControls();
+}
+
+// ─── Next / Back pagination ─────────────────────────────────────────
+// Both buttons just call runJobSearch with an explicit target page —
+// all the page-tracking logic above already handles the rest. Going
+// Back never goes below page 1. If the person has changed keywords,
+// location, or boards since the last search ran, paging the *old*
+// search wouldn't match what's on screen, so this nudges them to
+// search fresh instead of silently paging stale criteria.
+function _currentFormMatchesLastSearch() {
+  if (!S.searchPagination?.signature) return false;
+  const keywords = document.getElementById('searchKeywords').value.trim();
+  const countrySelectEl = document.getElementById('countrySelect');
+  const countryName = countrySelectEl ? countrySelectEl.options[countrySelectEl.selectedIndex].text : 'United States';
+  const cityVal = document.getElementById('searchCity')?.value.trim() || '';
+  const location = cityVal ? `${cityVal}, ${countryName}` : countryName;
+  const boards = getActiveBoards();
+  const signature = buildSearchSignature(keywords, location, boards, countrySelectEl?.value || 'us');
+  return signature === S.searchPagination.signature;
+}
+
+function goToNextPage() {
+  if (!_currentFormMatchesLastSearch()) {
+    alert('Your search criteria changed since the last search — click "Search All Boards" to search fresh, then Next/Back will page through those results.');
+    return;
+  }
+  const current = S.searchPagination?.page || 1;
+  runJobSearch(current + 1);
+}
+
+function goToPrevPage() {
+  if (!_currentFormMatchesLastSearch()) {
+    alert('Your search criteria changed since the last search — click "Search All Boards" to search fresh, then Next/Back will page through those results.');
+    return;
+  }
+  const current = S.searchPagination?.page || 1;
+  if (current <= 1) return;
+  runJobSearch(current - 1);
+}
+
+// Shows the pagination controls (and current page number) only once a
+// search has actually run, since "page 1 of nothing" isn't meaningful
+// before that.
+function updatePaginationControls() {
+  const wrap = document.getElementById('paginationControls');
+  if (!wrap) return;
+  const hasRun = !!S.searchPagination?.signature;
+  wrap.style.display = hasRun ? 'flex' : 'none';
+  if (!hasRun) return;
+  const page = S.searchPagination.page || 1;
+  document.getElementById('pageIndicator').textContent = `Page ${page}`;
+  const prevBtn = document.getElementById('prevPageBtn');
+  const nextBtn = document.getElementById('nextPageBtn');
+  if (prevBtn) prevBtn.disabled = page <= 1;
+  if (nextBtn) nextBtn.disabled = S.searchPagination.hasMore === false;
 }
 
 // ─── City options, dependent on selected country ────────────────────
@@ -774,7 +892,7 @@ const ADZUNA_COUNTRY_MAP = {
   'de': 'de', 'germany': 'de',
 };
 
-async function fetchAdzunaJobs(keywords, location, count, signal) {
+async function fetchAdzunaJobs(keywords, location, count, signal, page) {
   try {
     const locLower = (location || '').toLowerCase();
     const countryKey = Object.keys(ADZUNA_COUNTRY_MAP).find(k => locLower.includes(k));
@@ -786,6 +904,7 @@ async function fetchAdzunaJobs(keywords, location, count, signal) {
     workerAdzunaUrl.searchParams.set('country', country);
     workerAdzunaUrl.searchParams.set('where', location || '');
     workerAdzunaUrl.searchParams.set('num', String(Math.min(count, 20)));
+    workerAdzunaUrl.searchParams.set('page', String(page || 1));
     const res = await fetch(workerAdzunaUrl.toString(), { signal });
 
     if (!res.ok) {
@@ -804,7 +923,10 @@ async function fetchAdzunaJobs(keywords, location, count, signal) {
       location: item.location?.display_name || location || '',
       description: (item.description || '').slice(0, 300),
       fullDescription: item.description || '',
-      url: item.redirect_url || item.adref || '#',
+      // apply_url is set by the Worker from Adzuna's redirect_url —
+      // a direct link to the job portal (Indeed, LinkedIn, etc.)
+      // instead of Adzuna's own intermediary landing page.
+      url: item.apply_url || item.redirect_url || item.adref || '#',
       source: 'adzuna',
       board: 'adzuna',
       datePosted: item.created || '',
@@ -823,21 +945,20 @@ async function fetchAdzunaJobs(keywords, location, count, signal) {
   }
 }
 
-async function fetchApifyJobs(boards, keywords, location, count, signal) {
+async function fetchApifyJobs(boards, keywords, location, count, signal, page) {
   offrdTrack('job_search_start', {
     keywords: document.getElementById('searchKeywords')?.value || '',
     country: document.getElementById('countrySelect')?.value || '',
-    boards: getActiveBoards().join(',')
+    boards: getActiveBoards().join(','),
+    page: page || 1
   });
   updateJobStatus('🔄 Fetching live jobs…', 'info');
 
-  const adzunaBoards = boards.filter(b => b === 'adzuna');
+  const adzunaBoards = ADZUNA_ENABLED ? boards.filter(b => b === 'adzuna') : [];
   const jsearchBoards = boards.filter(b => b !== 'adzuna');
 
-  // Used to be clamped to 10 here regardless of what the person picked
-  // in "Results per board" — that's what made the 20-per-board option
-  // silently do nothing. fetchJSearchPage now handles >10 correctly via
-  // num_pages, so the real per-board count flows through as-is.
+  // 10 per board per page — see runJobSearch for why this is fixed
+  // rather than user-adjustable.
   const perBoard = Math.max(1, count);
 
   const jsearchRequests = jsearchBoards.map(board => {
@@ -845,11 +966,14 @@ async function fetchApifyJobs(boards, keywords, location, count, signal) {
     const query = location
       ? `${keywords} in ${location} ${boardHint}`.trim()
       : `${keywords} ${boardHint}`.trim();
-    return fetchJSearchPage(query, perBoard, board, signal);
+    return fetchJSearchPage(query, perBoard, board, signal, page);
   });
 
+  // Adzuna paused (ADZUNA_ENABLED = false) — never fires the request,
+  // even if 'adzuna' is somehow still present in `boards` (e.g. stale
+  // sessionStorage state from before this change).
   const adzunaRequest = adzunaBoards.length > 0
-    ? fetchAdzunaJobs(keywords, location, perBoard, signal)
+    ? fetchAdzunaJobs(keywords, location, perBoard, signal, page)
     : Promise.resolve([]);
 
   updateJobStatus(`🔄 Searching ${boards.length} boards simultaneously…`, 'info');
@@ -892,23 +1016,20 @@ async function fetchApifyJobs(boards, keywords, location, count, signal) {
   return jobs;
 }
 
-async function fetchJSearchPage(query, num, boardSource, signal) {
+async function fetchJSearchPage(query, num, boardSource, signal, page) {
   const _sel = document.getElementById('countrySelect');
   const countryCode = _sel ? _sel.value : 'us';
+  const targetPage = page || 1;
 
-  // JSearch returns up to 10 results per "page," and num_pages controls
-  // how many pages get fetched in this one call (each extra page costs
-  // an extra request credit on their end). Asking for more than 10
-  // results per board means asking for more pages, not a bigger "num" —
-  // num alone is capped at 10 by the API regardless of what we send.
-  const numPages = Math.min(Math.max(1, Math.ceil(num / 10)), 3);
-
+  // 10 results per page, one page per request — this is now true
+  // pagination (each Next is a fresh page) rather than asking for
+  // multiple pages in one call, so num_pages stays at 1.
   const wUrl = new URL(S.apiBase + '/api/search');
   wUrl.searchParams.set('source', 'jsearch');
   wUrl.searchParams.set('query', query);
   wUrl.searchParams.set('num', String(Math.min(num, 10)));
-  wUrl.searchParams.set('num_pages', String(numPages));
-  wUrl.searchParams.set('page', '1');
+  wUrl.searchParams.set('num_pages', '1');
+  wUrl.searchParams.set('page', String(targetPage));
   wUrl.searchParams.set('country', countryCode);
 
   const res = await fetch(wUrl.toString(), { method: 'GET', signal });
@@ -956,9 +1077,18 @@ async function fetchJSearchPage(query, num, boardSource, signal) {
   document.getElementById('searchKeywords').value = S.parsedProfile.searchTitle || S.parsedProfile.currentTitle || (S.parsedProfile.preferredRoles || [])[0] || '';
   document.getElementById('step1-indicator').classList.add('done');
 
+  // Reflects whatever page (if any) the person last viewed for the
+  // search criteria currently in the form — e.g. coming back from
+  // results.html after clicking Next a couple of times.
+  updatePaginationControls();
+
   // Re-running a search from History — restore the saved criteria and
-  // fire. Per-board result count is no longer user-adjustable; it's a
-  // fixed default (see runJobSearch) to keep search cost predictable.
+  // fire. This is a deliberate new search from the person's point of
+  // view (they picked it from a list of past searches), so it starts
+  // at page 1 rather than resuming wherever that search happened to
+  // leave off last time. Per-board result count is no longer
+  // user-adjustable; it's a fixed default (see runJobSearch) to keep
+  // search cost predictable.
   const params = new URLSearchParams(window.location.search);
   if (params.get('rerun') === '1') {
     try {
@@ -973,11 +1103,15 @@ async function fetchJSearchPage(query, num, boardSource, signal) {
         if (rerun.city !== undefined) document.getElementById('searchCity').value = rerun.city || '';
         if (rerun.boards?.length) {
           document.querySelectorAll('.board-toggle').forEach(el => {
-            el.classList.toggle('on', rerun.boards.includes(el.dataset.board));
+            const board = el.dataset.board;
+            // Adzuna is paused — never re-enable it from a saved
+            // History entry, even if that search originally used it.
+            if (board === 'adzuna') { el.classList.remove('on'); return; }
+            el.classList.toggle('on', rerun.boards.includes(board));
           });
         }
         sessionStorage.removeItem('offrd_rerun');
-        setTimeout(() => runJobSearch(), 200);
+        setTimeout(() => runJobSearch(1), 200);
       }
     } catch(e) {}
   }
