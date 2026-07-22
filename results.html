@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<!-- Google Analytics 4 — Consent Mode v2 -->
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('consent', 'default', {
+    analytics_storage: 'denied', ad_storage: 'denied',
+    ad_user_data: 'denied', ad_personalization: 'denied',
+    functionality_storage: 'granted', security_storage: 'granted',
+    wait_for_update: 2000
+  });
+  gtag('set', 'anonymize_ip', true);
+
+  function offrdTrack(eventName, params = {}) {
+    if (typeof gtag === 'undefined') return;
+    const user = JSON.parse(sessionStorage.getItem('offrd_user') || '{}');
+    gtag('event', eventName, {
+      app_name: 'Offrd',
+      user_id_hash: user.id ? user.id.slice(0,8) : 'anon',
+      ...params
+    });
+  }
+
+  function loadGA4() {
+    if (document.getElementById('ga4-script')) return;
+    const stored = localStorage.getItem('offrd_consent');
+    if (stored !== 'granted') return;
+    gtag('consent', 'update', { analytics_storage: 'granted', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
+    const s = document.createElement('script');
+    s.id = 'ga4-script'; s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=G-H4VM6CR2N1';
+    document.head.appendChild(s);
+    s.onload = () => gtag('config', 'G-H4VM6CR2N1', { anonymize_ip: true });
+  }
+  loadGA4();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Offrd — Job Matches</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="offrd-shared.css"/>
+</head>
+<body>
+<div class="app">
+
+<nav>
+  <a href="upload.html" onclick="event.preventDefault();offrdNavigate('upload.html');" style="text-decoration:none;display:flex;align-items:center;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 52" height="32" role="img" aria-label="Offrd">
+      <rect x="0" y="0" width="48" height="48" rx="10" fill="#f97316"/>
+      <polyline points="8,39 8,19 15,25 24,10 33,25 40,19 40,39" fill="white" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+      <rect x="6" y="38" width="36" height="6" rx="2" fill="white"/>
+      <circle cx="8" cy="18" r="3" fill="#1a2333"/><circle cx="24" cy="9" r="3.8" fill="#1a2333"/><circle cx="40" cy="18" r="3" fill="#1a2333"/>
+      <circle cx="8" cy="18" r="1.5" fill="white"/><circle cx="24" cy="9" r="1.9" fill="white"/><circle cx="40" cy="18" r="1.5" fill="white"/>
+      <text x="58" y="33" font-family="Syne,sans-serif" font-weight="800" font-size="24" fill="var(--text)" letter-spacing="-1">Offrd</text>
+      <circle cx="138" cy="19" r="4.5" fill="#f97316"/>
+    </svg>
+  </a>
+  <div class="nav-right" style="gap:8px;">
+    <div class="nav-tabs">
+      <button class="nav-tab active" id="tabSearch" onclick="switchTab('search')">Search</button>
+      <button class="nav-tab" id="tabPipeline" onclick="switchTab('pipeline')">Pipeline <span id="pipelineBadge" style="display:none;background:var(--accent);color:#fff;font-size:9px;padding:1px 5px;border-radius:99px;margin-left:3px;"></span></button>
+      <button class="nav-tab" id="tabHistory" onclick="switchTab('history')">History</button>
+    </div>
+    <button class="nav-more-btn" onclick="toggleNavMore()" id="navMoreBtn" title="More options">⋯</button>
+    <div class="nav-overflow" id="navOverflow">
+      <span id="apiStatus" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;"></span>
+      <span id="nav-user-name" style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace;display:none;"></span>
+      <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme">☀</button>
+      <button class="btn-ghost" onclick="openHelp()">? Help</button>
+      <button class="btn-ghost" onclick="openAbout()">ℹ About</button>
+      <button class="btn-ghost" id="logoutBtn" onclick="logoutUser()" style="display:none;color:var(--red,#f87171);border-color:rgba(248,113,113,0.3);" title="Sign out">⏻ Sign out</button>
+    </div>
+  </div>
+</nav>
+
+
+<!-- Help Modal -->
+<div class="modal-overlay" id="helpModal">
+  <div class="modal-lg">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+      <div>
+        <div class="modal-title">Help &amp; Setup Guide</div>
+        <div class="modal-sub">Get Offrd for your next role in minutes</div>
+      </div>
+      <button class="panel-close" onclick="closeHelp()" style="font-size:20px;padding:4px;">✕</button>
+    </div>
+    <div class="help-section-title">How to use the app</div>
+    <div class="help-step">
+      <div class="help-step-num">1</div>
+      <div class="help-step-body">
+        <h4>Review matches &amp; take action</h4>
+        <p>Jobs are ranked with a 0–100 match score broken down by Relevancy, Seniority Fit, Low Competition, and Salary Match. Click any job to see the skill gap chart and salary context. Use <strong style="color:var(--text);">✦ Tailor Resume + Cover Letter</strong> to generate a matched, AI-tailored resume and cover letter for that specific role in one go, downloadable as <strong style="color:var(--text);">PDF</strong> or <strong style="color:var(--text);">DOCX</strong>. Save interesting jobs to your <strong style="color:var(--text);">Pipeline</strong> board to track applications.</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeHelp()">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- About Modal -->
+<div class="modal-overlay" id="aboutModal">
+  <div class="modal-lg" style="width:560px;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+      <button class="panel-close" onclick="closeAbout()" style="font-size:20px;padding:4px;">✕</button>
+    </div>
+    <div class="about-hero">
+      <div style="font-size:32px;margin-bottom:10px;">🎯</div>
+      <p class="about-tagline">An AI-powered job search assistant that finds live listings across the world's top job boards, scores them against your resume, and helps you apply with a tailored, ATS-optimised resume — all in one place.</p>
+    </div>
+    <div class="about-credit">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;">How Offrd came to be</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;text-align:left;margin-bottom:16px;">The origin story is less "garage startup" and more "one too many tabs open at 1am." Picture six browser tabs, three different job boards, a resume that needed a different version for every single application, and the slow realisation that "tailoring your resume" mostly means copy-pasting the same bullet points and hoping nobody notices. After the fortieth tab, a simple thought emerged: what if one tool just did all of this — and didn't charge for the privilege, spam your phone, or sell your data to the highest bidder? Offrd was the answer to that very tired, very caffeinated question.</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;">How to use it</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;text-align:left;">Upload or paste your resume, then let Offrd analyse it and search live job boards on your behalf. Review AI-scored matches, tailor your resume for any role in one click, and track every application through the pipeline — from saved to offer.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeAbout()">Close</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div id="onboardWrap" class="onboard-wrap">
+    <div class="onboard-title">Getting started</div>
+    <div class="onboard-steps">
+      <div class="onboard-item" id="ob1"><div class="onboard-check">1</div><span>Upload resume</span></div>
+      <div class="onboard-item" id="ob2"><div class="onboard-check">2</div><span>Search boards</span></div>
+      <div class="onboard-item" id="ob3"><div class="onboard-check">3</div><span>Apply to a job</span></div>
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step done" id="step1-indicator" onclick="offrdNavigate('upload.html')" title="Back to Upload Resume"><div class="step-num">1</div><span>Upload Resume</span></div>
+    <div class="step-line"></div>
+    <div class="step done" id="step2-indicator" onclick="offrdNavigate('search.html')" title="Back to Search Jobs"><div class="step-num">2</div><span>Search Jobs</span></div>
+    <div class="step-line"></div>
+    <div class="step active" id="step3-indicator"><div class="step-num">3</div><span>Review Matches</span></div>
+  </div>
+
+  <div id="tabSearchContent">
+    <div id="step3" class="fade-in">
+      <div id="resultsLayout" class="layout">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;" class="results-toolbar-wrap">
+            <div>
+              <div class="section-title" id="resultsTitle">Top Matches</div>
+              <div class="section-sub" style="margin-bottom:0;" id="resultsSub"></div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;" class="results-toolbar">
+              <select id="sortResults" onchange="sortAndRender()" style="width:auto;font-size:12px;">
+                <option value="score">Sort: Match Score</option>
+                <option value="date">Sort: Most Recent</option>
+                <option value="competition">Sort: Least Applicants</option>
+              </select>
+              <select id="filterRecency" onchange="sortAndRender()" style="width:auto;font-size:12px;" title="Filters by how recently each job was posted">
+                <option value="">Any time posted</option>
+                <option value="1">Last 24 hours</option>
+                <option value="3">Last 3 days</option>
+                <option value="7">Last 7 days</option>
+                <option value="14">Last 14 days</option>
+              </select>
+              <select id="filterCity" onchange="sortAndRender()" style="width:auto;font-size:12px;">
+                <option value="">All Cities</option>
+              </select>
+              <select id="filterBoard" onchange="sortAndRender()" style="width:auto;font-size:12px;">
+                <option value="">All Boards</option>
+                <option value="linkedin" class="filterBoard-jsearch-opt">LinkedIn</option>
+                <option value="indeed" class="filterBoard-jsearch-opt">Indeed</option>
+                <option value="naukri" class="filterBoard-jsearch-opt">Naukri</option>
+                <option value="glassdoor" class="filterBoard-jsearch-opt">Glassdoor</option>
+              </select>
+              <select id="filterType" onchange="sortAndRender()" style="width:auto;font-size:12px;">
+                <option value="">All Job Types</option>
+                <option value="FULLTIME">Full-time</option>
+                <option value="PARTTIME">Part-time</option>
+                <option value="CONTRACTOR">Contract</option>
+                <option value="INTERN">Internship</option>
+              </select>
+              <select id="filterSeniority" onchange="sortAndRender()" style="width:auto;font-size:12px;" title="Filters by how well the AI scored each job's seniority fit for you">
+                <option value="">Any Seniority Fit</option>
+                <option value="70">Strong fit (70+)</option>
+                <option value="40">Moderate fit (40+)</option>
+              </select>
+              <button class="btn-ghost" style="font-size:11px;" onclick="offrdNavigate('search.html')">← Refine</button>
+            </div>
+          </div>
+
+          <div class="stats-row" id="statsRow"></div>
+          <div class="job-list" id="jobList">
+            <div class="empty"><span class="empty-icon">🔍</span><h3>No search yet</h3><p>Run a search to see your matched jobs here.</p></div>
+          </div>
+        </div>
+        <div id="sidePanel" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline Tab -->
+  <div id="tabPipelineContent" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div><div class="section-title">Job Pipeline</div><div class="section-sub" style="margin-bottom:0;">Track your applications from saved to offer</div></div>
+      <div class="export-bar">
+        <button class="btn-ghost" style="font-size:11px;" onclick="exportPipelineCSV()">⬇ Export CSV</button>
+        <button class="btn-ghost" style="font-size:11px;" onclick="clearPipeline()">🗑 Clear all</button>
+      </div>
+    </div>
+    <div class="pipeline-wrap">
+      <div class="pipeline-board">
+        <div class="pipeline-col col-saved"><div class="pipeline-col-header"><span class="pipeline-col-title">Saved</span><span class="pipeline-count" id="cnt-saved">0</span></div><div id="col-saved"></div></div>
+        <div class="pipeline-col col-applied"><div class="pipeline-col-header"><span class="pipeline-col-title">Applied</span><span class="pipeline-count" id="cnt-applied">0</span></div><div id="col-applied"></div></div>
+        <div class="pipeline-col col-interview"><div class="pipeline-col-header"><span class="pipeline-col-title">Interview</span><span class="pipeline-count" id="cnt-interview">0</span></div><div id="col-interview"></div></div>
+        <div class="pipeline-col col-offer"><div class="pipeline-col-header"><span class="pipeline-col-title">Offer</span><span class="pipeline-count" id="cnt-offer">0</span></div><div id="col-offer"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- History Tab -->
+  <div id="tabHistoryContent" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div><div class="section-title">Search History</div><div class="section-sub" style="margin-bottom:0;">Your last 5 searches — click to re-run</div></div>
+      <button class="btn-ghost" style="font-size:11px;" onclick="clearHistory()">🗑 Clear history</button>
+    </div>
+    <div id="historyList"></div>
+  </div>
+</main>
+</div>
+
+<!-- Resume Preview Modal -->
+<div class="preview-modal-overlay" id="previewModalOverlay" onclick="if(event.target===this)closePreview()">
+  <div class="preview-modal">
+    <div class="preview-modal-header">
+      <h3 id="previewTitle">Resume Preview</h3>
+      <div style="display:flex;gap:8px;">
+        <button class="preview-dl-btn" onclick="downloadFromPreview('docx')">⬇ DOCX</button>
+        <button class="preview-dl-btn" onclick="downloadFromPreview('pdf')">⬇ PDF</button>
+        <button class="preview-close-btn" onclick="closePreview()">✕ Close</button>
+      </div>
+    </div>
+    <div class="preview-modal-body" id="previewBody"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="offrd-app.js"></script>
+<script>
+// ─── Company brand colours — used as a subtle accent on tailored resumes.
+// Falls back to a neutral navy/orange (Offrd's own palette) for any
+// company not in this list, so the feature always returns something.
+const COMPANY_BRAND_COLORS = {
+  google:      { primary: '#4285F4', secondary: '#34A853' },
+  microsoft:   { primary: '#00A4EF', secondary: '#737373' },
+  amazon:      { primary: '#FF9900', secondary: '#232F3E' },
+  apple:       { primary: '#555555', secondary: '#A2AAAD' },
+  meta:        { primary: '#0668E1', secondary: '#1877F2' },
+  facebook:    { primary: '#1877F2', secondary: '#0668E1' },
+  netflix:     { primary: '#E50914', secondary: '#221F1F' },
+  salesforce:  { primary: '#00A1E0', secondary: '#1798C1' },
+  oracle:      { primary: '#F80000', secondary: '#312D2A' },
+  ibm:         { primary: '#0530AD', secondary: '#054ADA' },
+  sap:         { primary: '#0FAAFF', secondary: '#1B2A4A' },
+  adobe:       { primary: '#FF0000', secondary: '#2B0000' },
+  intel:       { primary: '#0071C5', secondary: '#000000' },
+  cisco:       { primary: '#1BA0D7', secondary: '#005073' },
+  nvidia:      { primary: '#76B900', secondary: '#1A1A1A' },
+  uber:        { primary: '#000000', secondary: '#06C167' },
+  airbnb:      { primary: '#FF5A5F', secondary: '#00A699' },
+  spotify:     { primary: '#1DB954', secondary: '#191414' },
+  paypal:      { primary: '#003087', secondary: '#0070BA' },
+  stripe:      { primary: '#635BFF', secondary: '#0A2540' },
+  shopify:     { primary: '#7AB55C', secondary: '#212B36' },
+  linkedin:    { primary: '#0A66C2', secondary: '#000000' },
+  twitter:     { primary: '#1D9BF0', secondary: '#000000' },
+  x:           { primary: '#000000', secondary: '#1D9BF0' },
+  tesla:       { primary: '#CC0000', secondary: '#171A20' },
+  jpmorgan:    { primary: '#0066B2', secondary: '#000000' },
+  jpmorganchase:{ primary: '#0066B2', secondary: '#000000' },
+  goldmansachs:{ primary: '#7399C6', secondary: '#001E62' },
+  morganstanley:{ primary: '#003DA5', secondary: '#000000' },
+  citi:        { primary: '#003B70', secondary: '#CC0000' },
+  citigroup:   { primary: '#003B70', secondary: '#CC0000' },
+  hsbc:        { primary: '#DB0011', secondary: '#000000' },
+  visa:        { primary: '#1A1F71', secondary: '#F7B600' },
+  mastercard:  { primary: '#EB001B', secondary: '#F79E1B' },
+  americanexpress: { primary: '#006FCF', secondary: '#000000' },
+  verizon:     { primary: '#CD040B', secondary: '#000000' },
+  att:         { primary: '#00A8E0', secondary: '#000000' },
+  tmobile:     { primary: '#E20074', secondary: '#000000' },
+  vodafone:    { primary: '#E60000', secondary: '#000000' },
+  accenture:   { primary: '#A100FF', secondary: '#000000' },
+  deloitte:    { primary: '#86BC25', secondary: '#000000' },
+  pwc:         { primary: '#D04A02', secondary: '#000000' },
+  ey:          { primary: '#2E2E38', secondary: '#FFE600' },
+  kpmg:        { primary: '#00338D', secondary: '#0091DA' },
+  mckinsey:    { primary: '#001E62', secondary: '#0072CE' },
+  bcg:         { primary: '#00843D', secondary: '#000000' },
+  bain:        { primary: '#CC0000', secondary: '#000000' },
+  publicissapient: { primary: '#FF3300', secondary: '#000000' },
+  cognizant:   { primary: '#1A4FBA', secondary: '#000000' },
+  infosys:     { primary: '#007CC3', secondary: '#000000' },
+  tcs:         { primary: '#003478', secondary: '#E81E2D' },
+  wipro:       { primary: '#341858', secondary: '#EC1E45' },
+  caterpillar: { primary: '#FFCD11', secondary: '#000000' },
+  athenahealth:{ primary: '#7B68EE', secondary: '#000000' },
+  staples:     { primary: '#CC0000', secondary: '#000000' },
+  telus:       { primary: '#4B286D', secondary: '#00C853' },
+  walmart:     { primary: '#0071CE', secondary: '#FFC220' },
+  target:      { primary: '#CC0000', secondary: '#000000' },
+  disney:      { primary: '#113CCF', secondary: '#000000' },
+  samsung:     { primary: '#1428A0', secondary: '#000000' },
+  sony:        { primary: '#000000', secondary: '#0072CE' },
+  intuit:      { primary: '#236CFF', secondary: '#000000' },
+  servicenow:  { primary: '#62D84E', secondary: '#000000' },
+  workday:     { primary: '#F38B00', secondary: '#0875E1' },
+  atlassian:   { primary: '#0052CC', secondary: '#2684FF' },
+  slack:       { primary: '#4A154B', secondary: '#36C5F0' },
+  zoom:        { primary: '#2D8CFF', secondary: '#000000' },
+  dropbox:     { primary: '#0061FF', secondary: '#000000' },
+  github:      { primary: '#181717', secondary: '#000000' },
+  gitlab:      { primary: '#FC6D26', secondary: '#E24329' },
+  twilio:      { primary: '#F22F46', secondary: '#000000' },
+  snowflake:   { primary: '#29B5E8', secondary: '#000000' },
+  databricks:  { primary: '#FF3621', secondary: '#000000' },
+  palantir:    { primary: '#000000', secondary: '#5C5C5C' },
+  reddit:      { primary: '#FF4500', secondary: '#000000' },
+  pinterest:   { primary: '#E60023', secondary: '#000000' },
+  snapchat:    { primary: '#FFFC00', secondary: '#000000' },
+  tiktok:      { primary: '#000000', secondary: '#FE2C55' },
+  flipkart:    { primary: '#2874F0', secondary: '#FFE500' },
+  swiggy:      { primary: '#FC8019', secondary: '#000000' },
+  zomato:      { primary: '#E23744', secondary: '#000000' },
+  paytm:       { primary: '#00BAF2', secondary: '#002970' },
+  razorpay:    { primary: '#0C2451', secondary: '#3395FF' },
+  zoho:        { primary: '#E2231A', secondary: '#000000' },
+  freshworks:  { primary: '#3DA744', secondary: '#000000' },
+  hcl:         { primary: '#0066A1', secondary: '#000000' },
+  techmahindra:{ primary: '#E84618', secondary: '#000000' },
+  larsentoubro:{ primary: '#003B71', secondary: '#000000' },
+  reliance:    { primary: '#0078D7', secondary: '#000000' },
+  tatamotors:  { primary: '#1D4289', secondary: '#000000' },
+  tataelxsi:   { primary: '#0F4C81', secondary: '#000000' },
+  mahindra:    { primary: '#E4002B', secondary: '#000000' },
+};
+
+const DEFAULT_BRAND = { primary: '#1a2333', secondary: '#f97316' };
+
+function getCompanyBrandColor(companyName) {
+  const key = (companyName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!key) return { ...DEFAULT_BRAND, name: companyName || '' };
+  // Try exact match, then a prefix match (handles "Google LLC", "Amazon.com Inc" etc.)
+  if (COMPANY_BRAND_COLORS[key]) return { ...COMPANY_BRAND_COLORS[key], name: companyName };
+  const matchKey = Object.keys(COMPANY_BRAND_COLORS).find(k => key.startsWith(k) || k.startsWith(key));
+  if (matchKey) return { ...COMPANY_BRAND_COLORS[matchKey], name: companyName };
+  return { ...DEFAULT_BRAND, name: companyName || '' };
+}
+
+// Converts a "#rrggbb" hex string to [r,g,b] ints for jsPDF's
+// setTextColor/setDrawColor, which take separate numeric channels
+// rather than a CSS color string.
+function hexToRgb(hex) {
+  const clean = (hex || '').replace('#', '');
+  const r = parseInt(clean.slice(0,2), 16);
+  const g = parseInt(clean.slice(2,4), 16);
+  const b = parseInt(clean.slice(4,6), 16);
+  return [r, g, b].some(Number.isNaN) ? [26, 26, 46] : [r, g, b];
+}
+
+// ─── Render Results ────────────────────────────────────────────────────
+function renderResults() {
+  const titleEl = document.getElementById('resultsTitle');
+  const subEl = document.getElementById('resultsSub');
+  // Combined total across both sources stays in the header — tabs
+  // below only change which subset of that total is currently listed.
+  if (titleEl) titleEl.textContent = `${S.jobs.length} Match${S.jobs.length === 1 ? '' : 'es'} Found`;
+  const lastSearchEntry = S.searchHistory[0];
+  const boardCount = lastSearchEntry?.boards?.length || 0;
+  const perBoard = lastSearchEntry?.perBoardCount;
+  const breakdown = (boardCount && perBoard) ? ` (up to ${perBoard} × ${boardCount} board${boardCount===1?'':'s'})` : '';
+  if (subEl) subEl.textContent = (S.isLiveData
+    ? 'Ranked by AI match score against your profile'
+    : 'Showing cached results') + breakdown;
+
+  populateCityFilterOptions();
+  renderStatsRow();
+  sortAndRender();
+}
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+function cityFromLocation(location) {
+  const raw = String(location || '').trim();
+  if (!raw) return '';
+  const first = raw.split(',')[0].trim();
+  if (!first || /^remote$/i.test(first) || /^not specified$/i.test(first)) return first || '';
+  return first;
+}
+
+function populateCityFilterOptions() {
+  const cityEl = document.getElementById('filterCity');
+  if (!cityEl) return;
+  const previous = cityEl.value;
+  const cities = [...new Set(S.jobs.map(j => cityFromLocation(j.location)).filter(Boolean))]
+    .sort((a,b) => a.localeCompare(b));
+  cityEl.innerHTML = '<option value="">All Cities</option>' +
+    cities.map(city => `<option value="${escapeHtml(city)}">${escapeHtml(city)}</option>`).join('');
+  if (cities.includes(previous)) cityEl.value = previous;
+}
+
+function renderStatsRow() {
+  const el = document.getElementById('statsRow');
+  if (!el) return;
+  const total = S.jobs.length;
+  const avgScore = total ? Math.round(S.jobs.reduce((a,j) => a + (j.scores?.overall || 0), 0) / total) : 0;
+  const liveCount = S.jobs.filter(j => j.isLive).length;
+  const lowComp = S.jobs.filter(j => (j.scores?.competition || 0) >= 70).length;
+  el.innerHTML = `
+    <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">Total Matches</div></div>
+    <div class="stat-card"><div class="stat-num">${avgScore}</div><div class="stat-lbl">Avg Match Score</div></div>
+    <div class="stat-card"><div class="stat-num">${lowComp}</div><div class="stat-lbl">Low Competition</div></div>
+    <div class="stat-card"><div class="stat-num">${liveCount}</div><div class="stat-lbl">Live Listings</div></div>
+  `;
+}
+
+const RESULTS_PAGE_SIZE = 20;
+let visibleJobsCount = RESULTS_PAGE_SIZE;
+let visibleMoreJobsCount = RESULTS_PAGE_SIZE;
+
+function sortAndRender(resetVisible = true) {
+  if (resetVisible) {
+    visibleJobsCount = RESULTS_PAGE_SIZE;
+    visibleMoreJobsCount = RESULTS_PAGE_SIZE;
+  }
+  const sortBy = document.getElementById('sortResults')?.value || 'score';
+  const recencyFilterVal = parseInt(document.getElementById('filterRecency')?.value || '0');
+  const cityFilterVal = document.getElementById('filterCity')?.value || '';
+  const boardFilterVal = document.getElementById('filterBoard')?.value || '';
+  const typeFilterVal = document.getElementById('filterType')?.value || '';
+  const seniorityFilterVal = parseInt(document.getElementById('filterSeniority')?.value || '0');
+
+  let view = [...S.jobs];
+  // postedDays can be null when the real posting date wasn't available
+  // for a job — exclude those from a recency filter rather than
+  // guessing, since we genuinely don't know how old they are.
+  if (recencyFilterVal) view = view.filter(j => j.postedDays !== null && j.postedDays !== undefined && j.postedDays <= recencyFilterVal);
+  if (cityFilterVal) view = view.filter(j => cityFromLocation(j.location) === cityFilterVal);
+  if (boardFilterVal) view = view.filter(j => j.source === boardFilterVal || j.board === boardFilterVal);
+  if (typeFilterVal) view = view.filter(j => (j.type || '').toUpperCase().replace(/[\s-]/g, '') === typeFilterVal);
+  if (seniorityFilterVal) view = view.filter(j => (j.scores?.seniority ?? 0) >= seniorityFilterVal);
+
+  // "Match Score" sort uses each job's rank within its own source
+  // (rankWithinSource, computed in search.html right after scoring)
+  // when available, so the JSearch tab and Adzuna tab each present
+  // their own independent best-to-worst ordering rather than a
+  // combined cross-source rank. Falls back to raw score for any job
+  // that predates this field (e.g. restored from older sessionStorage).
+  if (sortBy === 'score') {
+    view.sort((a,b) => {
+      if (a.rankWithinSource && b.rankWithinSource) return a.rankWithinSource - b.rankWithinSource;
+      return (b.scores?.overall||0) - (a.scores?.overall||0);
+    });
+  }
+  else if (sortBy === 'date') view.sort((a,b) => (a.postedDays??99) - (b.postedDays??99));
+  else if (sortBy === 'competition') view.sort((a,b) => (b.scores?.competition||0) - (a.scores?.competition||0));
+
+  const listEl = document.getElementById('jobList');
+  if (!listEl) return;
+
+  if (!view.length) {
+    listEl.innerHTML = '<div class="alert alert-warn">No jobs match the current filters. Try clearing a filter above.</div>';
+    return;
+  }
+
+  const jobs = view.filter(j => j.source !== 'adzuna');
+  const moreJobs = view.filter(j => j.source === 'adzuna');
+  listEl.innerHTML = renderJobSection('Jobs', jobs, visibleJobsCount, 'jobs') +
+    renderJobSection('More Jobs', moreJobs, visibleMoreJobsCount, 'more');
+}
+
+function renderJobSection(title, jobs, visibleCount, sourceKey) {
+  const visibleJobs = jobs.slice(0, visibleCount);
+  const remaining = Math.max(0, jobs.length - visibleJobs.length);
+  const empty = `<div class="alert alert-warn" style="margin-bottom:16px;">No ${title.toLowerCase()} match the current filters.</div>`;
+  const loadMore = remaining ? `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 0 6px;">
+      <div style="font-size:11px;color:var(--text3);">Showing ${visibleJobs.length} of ${jobs.length} matching ${title.toLowerCase()}</div>
+      <button class="btn-ghost" onclick="showMoreResults('${sourceKey}')">Show next ${Math.min(RESULTS_PAGE_SIZE, remaining)} ${title.toLowerCase()}</button>
+    </div>` : '';
+  return `
+    <div class="job-section" style="margin-bottom:28px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 12px;">
+        <div style="font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:0.5px;">${title}</div>
+        <div style="font-size:11px;color:var(--text3);">${jobs.length} result${jobs.length === 1 ? '' : 's'}</div>
+      </div>
+      ${visibleJobs.length ? visibleJobs.map(job => renderJobCard(job)).join('') + loadMore : empty}
+    </div>`;
+}
+
+function showMoreResults(sourceKey) {
+  if (sourceKey === 'more') visibleMoreJobsCount += RESULTS_PAGE_SIZE;
+  else visibleJobsCount += RESULTS_PAGE_SIZE;
+  sortAndRender(false);
+}
+
+function renderJobCard(job) {
+  const score = job.scores?.overall ?? 60;
+  const scoreColor = score >= 75 ? 'var(--green)' : score >= 50 ? 'var(--amber,#f59e0b)' : 'var(--red,#f87171)';
+  const inPipeline = Object.values(S.pipeline).some(col => col.find(j => j.id === job.id));
+  const circumference = 2 * Math.PI * 22;
+  const offset = circumference - (circumference * score / 100);
+
+  const scorePill = (label, value, color) => `
+    <div class="score-pill" title="${label}">
+      <span>${label} ${value}</span>
+      <span class="bar"><span class="bar-fill" style="width:${value}%;background:${color};display:block;"></span></span>
+    </div>`;
+
+  return `<div class="job-card" id="card-${job.id}" onclick="selectJobCard('${job.id}')">
+    <div class="job-card-top">
+      <div class="score-ring">
+        <svg width="52" height="52" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="22" fill="none" stroke="var(--border2)" stroke-width="4"/>
+          <circle cx="26" cy="26" r="22" fill="none" stroke="${scoreColor}" stroke-width="4"
+            stroke-dasharray="${circumference}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
+        </svg>
+        <div class="score-text" style="color:${scoreColor};">${score}</div>
+      </div>
+      <div class="job-info">
+        <div class="job-title">${job.title}</div>
+        <div class="job-company">${job.company} ${renderLocTags(job)}</div>
+        <div class="job-meta">
+          ${(job.postedDays !== null && job.postedDays !== undefined) ? `<span class="job-meta-item">🕐 ${job.postedDays === 0 ? 'Posted today' : `Posted ${job.postedDays}d ago`}</span>` : ''}
+          ${job.type ? `<span class="job-meta-item">💼 ${job.type}</span>` : ''}
+          ${job.salary ? `<span class="job-meta-item">💰 ${job.salary}</span>` : ''}
+          ${job.applicants ? `<span class="job-meta-item">👥 ~${job.applicants} applicants</span>` : ''}
+          <span class="job-meta-item">🔗 ${(job.source || job.board || '').replace(/^\w/, c => c.toUpperCase())}</span>
+        </div>
+        <div class="job-scores">
+          ${scorePill('Relevancy', job.scores?.relevancy ?? 60, 'var(--accent2)')}
+          ${scorePill('Seniority', job.scores?.seniority ?? 60, 'var(--cyan)')}
+          ${scorePill('Low Comp.', job.scores?.competition ?? 60, 'var(--green)')}
+        </div>
+        ${job.fitReason ? `<div style="font-size:11px;color:var(--text2);margin-top:10px;line-height:1.5;">✓ ${job.fitReason}</div>` : ''}
+        <div class="job-actions" onclick="event.stopPropagation()">
+          <button class="btn-sm btn-accent" onclick="openTailor('${job.id}')">✦ Tailor Resume + Cover Letter</button>
+          <button class="btn-sm ${inPipeline ? 'btn-green' : 'btn-outline'}" id="save-${job.id}" onclick="saveJobToPipeline('${job.id}')">${inPipeline ? '✓ Saved' : '＋ Save'}</button>
+          <button class="btn-sm btn-outline" onclick="openApply('${job.id}')">↗ Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderLocTags(job) {
+  if (!job || !job.location) return '';
+  return `<span style="color:var(--text3);">· ${job.location}</span>`;
+}
+
+function selectJobCard(jobId) {
+  const job = S.jobs.find(j => j.id === jobId);
+  if (!job) return;
+  document.querySelectorAll('.job-card').forEach(el => el.classList.remove('selected'));
+  document.getElementById('card-' + jobId)?.classList.add('selected');
+
+  const panel = document.getElementById('sidePanel');
+  panel.style.display = 'block';
+  document.getElementById('resultsLayout').classList.add('with-panel');
+  panel.innerHTML = `<div class="panel fade-in">
+    <button class="panel-close" onclick="closePanel()">✕</button>
+    <div class="panel-title">${job.title}</div>
+    <div class="panel-sub">${job.company}${job.location ? ' · ' + job.location : ''}</div>
+    ${renderSalaryBench(job)}
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-top:16px;margin-bottom:8px;">What this job is about</div>
+    ${renderJobKeyPoints(job)}
+    <div class="job-actions" style="margin-top:16px;">
+      <button class="btn-sm btn-accent" onclick="openTailor('${job.id}')">✦ Tailor Resume + Cover Letter</button>
+      <button class="btn-sm btn-outline" onclick="openApply('${job.id}')">↗ Apply</button>
+    </div>
+  </div>`;
+}
+
+function closePanel() {
+  const panel = document.getElementById('sidePanel');
+  if (panel) panel.style.display = 'none';
+  document.getElementById('resultsLayout')?.classList.remove('with-panel');
+  document.querySelectorAll('.job-card').forEach(el => el.classList.remove('selected'));
+}
+
+function openApply(jobId) {
+  const job = S.jobs.find(j => j.id === jobId);
+  if (!job) return;
+  offrdTrack('job_apply_click', { job_title: job.title, company: job.company });
+  saveJobToPipeline(jobId);
+  // apply_url is set by the Worker from Adzuna's redirect_url — a
+  // direct link to the original job portal (Indeed, LinkedIn, company
+  // careers page, etc.) instead of Adzuna's own intermediary landing
+  // page, which used to make Apply a two-step click. JSearch jobs
+  // don't have this field at all, so they fall through to url as
+  // before — this is purely additive for the Adzuna tab.
+  const applyUrl = job.apply_url || job.url;
+  if (applyUrl && applyUrl !== '#') window.open(applyUrl, '_blank', 'noopener');
+}
+
+// ─── Skill Gap / Salary (shown in side panel) ─────────────────────────
+function renderJobKeyPoints(job) {
+  if (job.keyPoints && job.keyPoints.length) {
+    return `<ul style="margin:0;padding-left:18px;font-size:12px;color:var(--text2);line-height:1.7;">
+      ${job.keyPoints.map(pt => `<li style="margin-bottom:4px;">${pt}</li>`).join('')}
+    </ul>`;
+  }
+  // Fallback for jobs fetched before this summary existed (e.g. an
+  // older cached search from history) — no AI call available here, so
+  // this is a plain, deterministic excerpt of the real description
+  // rather than inventing bullet points we can't actually generate
+  // without a model call.
+  const raw = (job.fullDescription || job.description || '').trim();
+  if (!raw) return `<div style="font-size:12px;color:var(--text3);">No description available for this listing.</div>`;
+  const sentences = raw.split(/(?<=[.!?])\s+/).slice(0, 3).join(' ');
+  return `<div style="font-size:12px;color:var(--text2);line-height:1.7;">${sentences}</div>`;
+}
+
+function renderSalaryBench(job) {
+  if (!job.salary) return '';
+  return `<div class="salary-bench">
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Salary context</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;">Listed: <strong style="color:var(--text);">${job.salary}</strong></div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px;">Score ${job.scores?.salaryMatch || 0}/100 against your target range</div>
+  </div>`;
+}
+
+// ─── PDF text sanitizer ────────────────────────────────────────────────
+// jsPDF's built-in "helvetica" font only reliably renders Latin-1
+// (Windows-1252-ish) code points. Model output sometimes contains
+// smart quotes, em/en dashes, arrows, or other Unicode punctuation
+// that falls outside that range and renders as garbled glyphs (the
+// "!'" mojibake seen in earlier sessions). This normalises anything
+// going into doc.text()/doc.splitTextToSize() to safe ASCII/Latin-1
+// equivalents, and strips whatever's left over as a last resort —
+// accented Latin letters (é, ñ, ü …) survive since those ARE in
+// Latin-1 and render fine.
+function sanitizeForPdfFont(text) {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u2192\u2794\u27A1\u21D2]/g, '->')
+    .replace(/[\u25CF\u25E6\u2023\u00B7]/g, '-')
+    .replace(/[\u2713\u2714]/g, 'v')
+    .replace(/[^\x00-\xFF]/g, '');
+}
+
+// ─── Hallucination Check ────────────────────────────────────────────
+// Deterministic, code-level cross-check — not a second AI call. After
+// tailoring, scans the generated resume's text for anything that
+// looks like a company/organisation name, and flags any such name
+// that doesn't match (even loosely — "Vodafone" vs "Vodafone Idea
+// Ltd") a real employer from S.parsedProfile.employers, which was
+// itself extracted verbatim from the person's actual uploaded resume
+// during parsing. This catches a fabricated employer with certainty —
+// no model call, no extra cost or latency, and no risk of the checker
+// itself hallucinating, since it's plain string matching.
+//
+// What this can't catch: fabricated METRICS, dates, or achievements
+// attached to a real, correctly-named employer — those aren't
+// detectable by name-matching alone. This is a real safety net for
+// the one failure mode that's both common and mechanically checkable,
+// not a guarantee the content is 100% accurate in every respect.
+const ORG_SUFFIX_RE = /\b([A-Z][a-zA-Z&.]*(?:\s+[A-Z][a-zA-Z&.]*){0,3})\s+(Ltd\.?|Inc\.?|LLC|LLP|Corp\.?|Corporation|Pvt\.?\s*Ltd\.?|Limited|Technologies|Solutions|Group|Systems)\b/g;
+// Standalone Title-Case sequences of 2+ words are a weaker signal (lots
+// of false positives: "Customer Experience", "Product Roadmap") — only
+// flagged if they also appear right after a strong "employer position"
+// marker. Deliberately limited to "at" and "|" — dashes (–, -) are too
+// commonly used inside a job title itself (e.g. "Manager – Experience
+// Management") to safely treat as a title/company separator, and using
+// them produced false positives against real, correct resume content.
+const ORG_AFTER_MARKER_RE = /(?:\bat\s+|\|\s*)([A-Z][a-zA-Z&.]*(?:\s+[A-Z][a-zA-Z&.]*){0,3})\b/g;
+// Words that are never themselves a company name but can get swept up
+// by the patterns above (date-range artifacts, generic resume terms).
+const ORG_STOPWORDS = new Set(['Present', 'Current', 'Ongoing', 'Experience', 'Management', 'Manager', 'Lead', 'Senior', 'Engineer']);
+
+function extractCandidateOrgNames(text) {
+  const found = new Set();
+  let m;
+  ORG_SUFFIX_RE.lastIndex = 0;
+  while ((m = ORG_SUFFIX_RE.exec(text))) found.add((m[1] + ' ' + m[2]).trim());
+  ORG_AFTER_MARKER_RE.lastIndex = 0;
+  while ((m = ORG_AFTER_MARKER_RE.exec(text))) {
+    const candidate = m[1].trim();
+    const words = candidate.split(/\s+/);
+    // Skip short/common words this pattern is too loose to avoid
+    // otherwise (titles, generic nouns) — real company names in this
+    // position are almost always 2+ words or a single distinctive word,
+    // and not purely made up of known stopwords.
+    if (words.length >= 2 && !words.every(w => ORG_STOPWORDS.has(w))) found.add(candidate);
+  }
+  return Array.from(found);
+}
+
+// Loose match: true if `candidate` is the same organisation as one of
+// the known real employers, allowing for suffix differences like
+// "Vodafone" vs "Vodafone Idea Ltd" or punctuation/case differences.
+function matchesKnownEmployer(candidate, knownEmployers) {
+  const norm = s => s.toLowerCase().replace(/[.,]/g, '').replace(/\b(ltd|inc|llc|llp|corp|corporation|pvt|limited|technologies|solutions|group|systems)\b/g, '').replace(/\s+/g, ' ').trim();
+  const candNorm = norm(candidate);
+  if (!candNorm) return true; // nothing meaningful left after stripping suffixes — not a real flag
+  return knownEmployers.some(emp => {
+    const empNorm = norm(emp);
+    if (!empNorm) return false;
+    return empNorm.includes(candNorm) || candNorm.includes(empNorm);
+  });
+}
+
+// Runs against the single tailored resume object ({ sections: [...] })
+// produced by the combined tailor+cover-letter call. Returns a flat
+// array of unmatched candidate org names (empty if none, or if we
+// have no known employer list to check against).
+function verifyAgainstKnownEmployers(resume, parsedProfile) {
+  const knownEmployers = Array.isArray(parsedProfile?.employers) ? parsedProfile.employers.filter(Boolean) : [];
+  if (!knownEmployers.length || !resume || !Array.isArray(resume.sections)) return [];
+  const fullText = resume.sections.map(s => `${s.heading}\n${s.content || ''}`).join('\n');
+  const candidates = extractCandidateOrgNames(fullText);
+  const unmatched = candidates.filter(c => !matchesKnownEmployer(c, knownEmployers));
+  return Array.from(new Set(unmatched));
+}
+
+// ─── Tailor Resume + Cover Letter (combined flow) ─────────────────────
+// One AI call produces a matched resume + cover letter pair for a
+// specific job: S.tailoredResumes[jobId] = { resume: {sections:[...]},
+// coverLetter: {subjectLine, body}, summary: {changes, gaps} }.
+async function openTailor(jobId) {
+  const _tj = S.jobs.find(j => j.id === jobId);
+  if (_tj) offrdTrack('resume_tailor_start', {job_title: _tj.title, company: _tj.company});
+  const job = S.jobs.find(j => j.id === jobId);
+  if (!job) return;
+  if (!S.resumeText && !S.resumeBase64) {
+    if (confirm('No resume found. You\'ll need to upload one before tailoring a resume.\n\nGo to Upload Resume now?')) {
+      offrdNavigate('upload.html');
+    }
+    return;
+  }
+
+  const panel = document.getElementById('sidePanel');
+  panel.style.display = 'block';
+  document.getElementById('resultsLayout').classList.add('with-panel');
+
+  S._currentTailorJob = jobId;
+
+  panel.innerHTML = `<div class="panel fade-in">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+      <div><div class="panel-title">✦ Tailor Resume + Cover Letter</div><div class="panel-sub" style="margin-bottom:0;">${job.title} at ${job.company}</div></div>
+      <button class="panel-close" onclick="closePanel()">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:14px;line-height:1.6;padding:8px 10px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);">
+      Our AI will generate <strong style="color:var(--text);">one tailored resume</strong> and a <strong style="color:var(--text);">matching cover letter</strong> for this role, both branded with ${job.company}'s colour. Your original resume's facts, dates, and metrics are preserved exactly — only emphasis, ordering, and framing change.
+    </div>
+    <div id="tailorProgress"></div>
+    <div id="tailorOutput" style="margin-top:10px;"></div>
+  </div>`;
+
+  const tailorStages = [
+    { label: 'Reading original resume structure', pct: 12 },
+    { label: 'Analysing job description & keywords', pct: 28 },
+    { label: 'Tailoring resume content', pct: 48 },
+    { label: 'Drafting matched cover letter', pct: 68 },
+    { label: 'Formatting & ATS check', pct: 84 },
+    { label: 'Verifying against your real work history', pct: 96 },
+    { label: 'Done', pct: 100 }
+  ];
+  showProgress('tailorProgress', tailorStages, 0);
+  showGenerationOverlay('✦ Tailoring your resume & cover letter…', tailorStages, 0);
+  let tailorStageIdx = 0;
+  const tailorTimer = setInterval(() => {
+    tailorStageIdx = Math.min(tailorStageIdx + 1, tailorStages.length - 2);
+    showProgress('tailorProgress', tailorStages, tailorStageIdx);
+    updateGenerationOverlay(tailorStages, tailorStageIdx);
+  }, 2200);
+
+  try {
+    const profileStr = S.parsedProfile ? JSON.stringify(S.parsedProfile) : '';
+
+    const promptText = `You are helping a candidate create a tailored resume and cover letter for a specific job application. Use the following structure, rules, and design approach exactly.
+
+ABSOLUTE RULES — violations destroy user trust and are unacceptable:
+1. ONLY use facts, companies, job titles, dates, and achievements EXPLICITLY present in the Original Resume (attached as a document, or given as text below). No fabrication.
+2. NEVER invent, add, or infer ANY employer, company, role, achievement, metric, skill, or date not in the original.
+3. NEVER add an employer, company, or job title that does not literally appear in the Original Resume text below or attached — not from your training data, not as a plausible-sounding example, not under any circumstance.
+4. PRESERVE the EXACT employers, titles, dates, and quantified metrics from the original — do not alter facts. Keep all metrics exactly as given.
+5. Tailor by reordering and reframing existing bullets/content to match the job description's vocabulary — you may change wording emphasis, bullet ordering, keyword density, summary framing, and skills ordering.
+6. Use the candidate's actual current title (from the resume), never a title borrowed from the job posting.
+7. NEVER mention the target company name anywhere in the RESUME — the resume must be generic and reusable. The cover letter, by contrast, should reference the company by name naturally.
+8. Copy every email address, phone number, LinkedIn URL, and other website from the Original Resume EXACTLY as written. Never invent or alter contact details.
+9. Use ASCII-only punctuation throughout (straight quotes, hyphens). No em dashes anywhere in either document.
+10. In the cover letter, if there's a genuine gap between the candidate's background and the job requirements, name it plainly and honestly in its own short paragraph — no over-apologizing — and note adjacent/transferable experience if it genuinely exists. Do not invent a gap if there isn't one; in that case say so briefly.
+11. Return ONLY a valid JSON object — no markdown, no explanation, no code fences.
+
+Job: ${job.title} at ${job.company}
+Job Location: ${job.location || 'N/A'}
+Job Description: ${job.description}
+Fit gap to address: ${job.gapReason || 'N/A'}
+Candidate Profile: ${profileStr.slice(0,1500)}
+${S.resumeBase64 ? '' : 'Original Resume:\n' + (S.resumeText || '').slice(0,2000)}
+
+RESUME structure (in order, as sections): Profile/Summary (4-6 sentences, opening with the strongest JD-matching credential), Professional Experience (reverse-chronological, bullets re-ordered by JD relevance), Key Achievements (2-4 quantified achievements per role, as a separate section, rows formatted "Outcome | Impact"), Skills (grouped, JD-matching category first), Education, Certifications (only if present in the original resume).
+
+COVER LETTER structure: the "body" field should read as a complete letter starting with "Dear Hiring Team," and containing, in order: an opening paragraph (interest in the role + the 1-2 best alignments), 2-3 body paragraphs (each anchored to a specific past role with quantified examples, matching JD vocabulary), an honest gap paragraph per rule 10 above, and a closing paragraph that connects to the company's mission if genuine and thanks them for their consideration. End the body with "Sincerely," on its own line — do NOT include the candidate's name after it, that will be added automatically. Keep the whole letter under 380 words. Do not include a date, address block, or subject line inside "body" — those are handled separately.
+
+Return ONLY this JSON (no markdown):
+{"contactInfo":{"emails":[],"phones":[],"linkedinUrls":[],"websites":[]},"resume":{"sections":[{"heading":"PROFESSIONAL SUMMARY","content":"..."},{"heading":"PROFESSIONAL EXPERIENCE","content":"..."},{"heading":"KEY ACHIEVEMENTS","content":"Outcome | Impact\\nGenAI Automation | $8M revenue + $8.5M savings"},{"heading":"SKILLS","content":"..."},{"heading":"EDUCATION","content":"..."}]},"coverLetter":{"subjectLine":"Re: ${job.title.replace(/"/g,'')}","body":"Dear Hiring Team,\\n\\n...\\n\\nSincerely,"},"summary":{"changes":"1-3 sentences on what was reordered or reframed and why","gaps":"1-2 sentences naming any gap flagged in the cover letter, or a brief note that no significant gap was found"}}
+
+Rules: bullet points in resume "content" strings use "• " prefix. Content strings use \\n for newlines. No trailing commas. Close all braces.`;
+
+    const messages = [];
+    if (S.resumeBase64) {
+      messages.push({
+        role: 'user',
+        content: [
+          { type: 'document', source: { type: 'base64', media_type: S.resumeMime, data: S.resumeBase64 } },
+          { type: 'text', text: promptText }
+        ]
+      });
+    } else {
+      messages.push({ role: 'user', content: promptText });
+    }
+
+    const res = await fetch(S.apiBase + '/api/tailor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, max_tokens: 6000 })
+    });
+
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    let raw = data.content.map(b => b.text||'').join('');
+
+    raw = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
+
+    const objStart = raw.indexOf('{');
+    const objEnd = raw.lastIndexOf('}');
+    if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+      raw = raw.slice(objStart, objEnd + 1);
+    }
+
+    raw = raw.replace(/,(\s*[}\]])/g, '$1');
+
+    let parsed = null;
+    let neededRepair = false;
+    try {
+      parsed = JSON.parse(raw);
+    } catch(e1) {
+      neededRepair = true;
+      try {
+        const lastGoodEnd = raw.lastIndexOf('}');
+        if (lastGoodEnd > 0) {
+          const partial = raw.slice(0, lastGoodEnd + 1);
+          let depth = 0;
+          for (const ch of partial) { if (ch==='{') depth++; else if (ch==='}') depth--; }
+          const closing = '}'.repeat(Math.max(0, depth));
+          parsed = JSON.parse(partial + closing);
+        }
+      } catch(e2) {
+        parsed = null;
+      }
+    }
+
+    clearInterval(tailorTimer);
+
+    // The parse schema now stores contact details, but a user may still
+    // arrive here with a profile parsed before that schema existed. The
+    // tailoring response sees the original resume too, so use its root-level
+    // contactInfo to upgrade that in-session profile without making the user
+    // upload and analyse the same resume again.
+    if (parsed && typeof parsed === 'object' && parsed.contactInfo) {
+      const mergedContactInfo = normaliseResumeContactInfo(S.parsedProfile, parsed.contactInfo);
+      if (getResumeContactParts({ contactInfo: mergedContactInfo }).length) {
+        if (!S.parsedProfile) S.parsedProfile = {};
+        S.parsedProfile.contactInfo = mergedContactInfo;
+        persistState();
+      }
+      delete parsed.contactInfo;
+    }
+
+    let hallucinationFlags = [];
+    if (parsed && typeof parsed === 'object' && parsed.resume) {
+      // Real verification stage — shown explicitly here because this is
+      // genuine work happening (the cross-check below), not another
+      // timer tick standing in for it like the stages before it.
+      const verifyIdx = tailorStages.length - 2;
+      showProgress('tailorProgress', tailorStages, verifyIdx);
+      updateGenerationOverlay(tailorStages, verifyIdx);
+      hallucinationFlags = verifyAgainstKnownEmployers(parsed.resume, S.parsedProfile);
+    }
+
+    showProgress('tailorProgress', tailorStages, tailorStages.length-1);
+    setTimeout(() => { const tp = document.getElementById('tailorProgress'); if(tp) tp.style.display='none'; }, 500);
+    hideGenerationOverlay();
+
+    if (parsed && typeof parsed === 'object' && parsed.resume) {
+      offrdTrack('resume_tailor_complete', {
+        job_title: job.title,
+        company: job.company,
+        has_cover_letter: !!parsed.coverLetter
+      });
+      S.tailoredResumes[jobId] = {
+        resume: parsed.resume,
+        coverLetter: parsed.coverLetter || null,
+        summary: parsed.summary || null
+      };
+      renderTailorResult(jobId, job, neededRepair, hallucinationFlags);
+    } else {
+      document.getElementById('tailorOutput').innerHTML = '<div class="alert alert-warn">✕ Could not generate a tailored resume. Please try again.</div>';
+    }
+
+  } catch (err) {
+    clearInterval(tailorTimer);
+    const tp = document.getElementById('tailorProgress'); if(tp) tp.style.display='none';
+    hideGenerationOverlay();
+    reportAPIFailure('anthropic_tailor', 0, err.message || 'Tailoring failed');
+    document.getElementById('tailorOutput').innerHTML = `<div class="alert alert-warn">✕ ${err.message}</div>`;
+  }
+}
+
+function renderTailorResult(jobId, job, neededRepair, hallucinationFlags) {
+  const data = S.tailoredResumes[jobId];
+  if (!data) return;
+  hallucinationFlags = hallucinationFlags || [];
+  const brandColor = getCompanyBrandColor(job?.company || '');
+  const safeTitle = (job.title || '').replace(/'/g,'').replace(/"/g,'');
+
+  const hallucinationWarning = hallucinationFlags.length ? `<div style="margin-bottom:12px;padding:10px 14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.35);border-left:4px solid #dc2626;border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6;">
+    <strong style="color:#dc2626;">⚠ Possible unverified company name${hallucinationFlags.length>1?'s':''}</strong><br>
+    The resume mentions "${hallucinationFlags.join('", "')}" — this doesn't match any employer found in your original resume. This may be a false positive (formatting, an abbreviation, or a parent/subsidiary name), but please double-check it's accurate before sending.
+  </div>` : '';
+
+  const missingParts = [];
+  if (!data.resume) missingParts.push('resume');
+  if (!data.coverLetter) missingParts.push('cover letter');
+  const repairWarning = (neededRepair || missingParts.length) ? `<div style="margin-bottom:12px;padding:10px 14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-left:4px solid #ef4444;border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6;">
+    <strong style="color:#dc2626;">⚠ Some content may be incomplete</strong><br>
+    ${missingParts.length ? `The ${missingParts.join(' and ')} couldn't be generated this time. ` : ''}The response was unusually long and may be cut off mid-sentence in places — please read through carefully before downloading, and regenerate if anything looks incomplete.
+  </div>` : '';
+
+  const summaryBlock = data.summary ? `<div style="margin-bottom:12px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6;">
+    ${data.summary.changes ? `<div><strong style="color:var(--text);">What changed:</strong> ${data.summary.changes}</div>` : ''}
+    ${data.summary.gaps ? `<div style="margin-top:6px;"><strong style="color:var(--text);">Gap check:</strong> ${data.summary.gaps}</div>` : ''}
+  </div>` : '';
+
+  const disclaimer = `${hallucinationWarning}${repairWarning}${summaryBlock}<div style="margin-bottom:12px;padding:10px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-left:4px solid #f59e0b;border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6;">
+    <strong style="color:#b45309;">⚠ Please review before sending</strong><br>
+    AI-generated content can contain errors, outdated facts, or inaccuracies. Always review both documents carefully before applying. Verify all dates, titles, metrics, and company names are correct.
+  </div>
+  <div style="margin-bottom:12px;padding:8px 14px;background:rgba(${parseInt(brandColor.primary.slice(1,3),16)},${parseInt(brandColor.primary.slice(3,5),16)},${parseInt(brandColor.primary.slice(5,7),16)},0.08);border-left:4px solid ${brandColor.primary};border-radius:8px;font-size:11px;color:var(--text2);">
+    <strong style="color:${brandColor.primary};">🎨 ${brandColor.name || job?.company || 'Company'} colour applied</strong> — both documents share this accent colour, fonts, and header style.
+  </div>`;
+
+  const cards = `<div style="display:flex;flex-direction:column;gap:12px;">
+    ${data.resume ? `<div class="variant-card" style="cursor:default;">
+      <div class="variant-card-top">
+        <span class="variant-name">✦ Tailored Resume</span>
+      </div>
+      <div class="variant-desc">Reordered and reframed for this role, facts unchanged.</div>
+      <div class="variant-actions">
+        <button class="eye-icon-btn" onclick="previewTailored('resume','${jobId}','${safeTitle}')" title="Preview">👁</button>
+        <button class="btn-sm btn-green" style="flex:1;min-width:0;" onclick="downloadResume('${jobId}','${safeTitle}','docx')">⬇ DOCX</button>
+        <button class="btn-sm btn-outline" style="flex:1;min-width:0;" onclick="downloadResume('${jobId}','${safeTitle}','pdf')">⬇ PDF</button>
+      </div>
+    </div>` : ''}
+    ${data.coverLetter ? `<div class="variant-card" style="cursor:default;">
+      <div class="variant-card-top">
+        <span class="variant-name">✉ Matched Cover Letter</span>
+      </div>
+      <div class="variant-desc">Same accent colour, fonts, and header style as the resume.</div>
+      <div class="variant-actions">
+        <button class="eye-icon-btn" onclick="previewTailored('cover','${jobId}','${safeTitle}')" title="Preview">👁</button>
+        <button class="btn-sm btn-outline" style="flex:1;min-width:0;" onclick="copyCoverLetter('${jobId}')">📋 Copy</button>
+        <button class="btn-sm btn-green" style="flex:1;min-width:0;" onclick="downloadCoverLetterFile('${jobId}','${safeTitle}','doc')">⬇ DOC</button>
+        <button class="btn-sm btn-outline" style="flex:1;min-width:0;" onclick="downloadCoverLetterFile('${jobId}','${safeTitle}','pdf')">⬇ PDF</button>
+      </div>
+    </div>` : ''}
+  </div>`;
+
+  document.getElementById('tailorOutput').innerHTML = disclaimer + cards;
+}
+
+// Contact details are source facts, not tailored prose. Keep one canonical
+// normaliser/formatter for preview, DOCX, and PDF so every output includes
+// exactly the same values. The legacy aliases let an older cached profile or
+// a slightly different parser response continue to work.
+function normaliseResumeContactInfo(...sources) {
+  const result = { emails: [], phones: [], linkedinUrls: [], websites: [] };
+  const add = (bucket, value) => {
+    const values = Array.isArray(value) ? value : (value ? [value] : []);
+    values.forEach(item => {
+      const text = String(item || '').trim();
+      if (text && !result[bucket].some(existing => existing.toLowerCase() === text.toLowerCase())) {
+        result[bucket].push(text);
+      }
+    });
+  };
+
+  sources.filter(Boolean).forEach(source => {
+    const candidates = source.contactInfo ? [source.contactInfo, source] : [source];
+    candidates.forEach(contact => {
+      add('emails', contact.emails);
+      add('emails', contact.email);
+      add('phones', contact.phones);
+      add('phones', contact.phone);
+      add('linkedinUrls', contact.linkedinUrls);
+      add('linkedinUrls', contact.linkedinUrl);
+      add('linkedinUrls', contact.linkedin);
+      add('websites', contact.websites);
+      add('websites', contact.website);
+      add('websites', contact.portfolioUrl);
+      add('websites', contact.githubUrl);
+    });
+  });
+
+  // LinkedIn sometimes gets returned in both URL buckets. Keep it once, in
+  // the more specific bucket, without rewriting the value itself.
+  const linkedinSet = new Set(result.linkedinUrls.map(value => value.toLowerCase()));
+  result.websites = result.websites.filter(value => !linkedinSet.has(value.toLowerCase()));
+  return result;
+}
+
+function getResumeContactParts(profile = S.parsedProfile) {
+  const contact = normaliseResumeContactInfo(profile);
+  const seen = new Set();
+  return [contact.emails, contact.phones, contact.linkedinUrls, contact.websites]
+    .flat()
+    .filter(value => {
+      const key = value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function getResumeHeadline(profile = S.parsedProfile) {
+  if (!profile) return '';
+  const parts = [];
+  if (profile.currentTitle) parts.push(String(profile.currentTitle).trim());
+  if (profile.yearsExperience !== undefined && profile.yearsExperience !== null && profile.yearsExperience !== '') {
+    parts.push(`${profile.yearsExperience}+ years experience`);
+  }
+  return parts.filter(Boolean).join(' · ');
+}
+
+function escapeResumeHTML(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function buildResumeHTML(resumeData, candidateName, accentColor) {
+  const name = candidateName || (S.parsedProfile?.name) || 'Resume';
+  const contact = getResumeContactParts().join(' · ');
+  const headline = getResumeHeadline();
+  const accentStyle = accentColor ? ` style="--resume-accent:${accentColor};"` : '';
+  let html = `<div class="resume-doc"${accentStyle}>`;
+  html += `<div class="r-name">${escapeResumeHTML(name)}</div>`;
+  if (contact) html += `<div class="r-contact">${escapeResumeHTML(contact)}</div>`;
+  if (headline) html += `<div class="r-contact">${escapeResumeHTML(headline)}</div>`;
+
+  const sections = resumeData.sections || [];
+  sections.forEach(sec => {
+    html += `<div class="r-section">${sec.heading}</div>`;
+    if (!sec.content) return;
+
+    if (sec.heading.includes('ACHIEVEMENT') || sec.heading.includes('SNAPSHOT')) {
+      const rows = sec.content.split('\n').filter(l => l.includes('|') && l.trim());
+      if (rows.length > 1) {
+        html += `<table class="r-table">`;
+        rows.forEach((row, i) => {
+          const cells = row.split('|').map(c => c.trim()).filter(Boolean);
+          if (i === 0) html += `<tr>${cells.map(c=>`<th>${c}</th>`).join('')}</tr>`;
+          else if (!row.match(/^[\s\-|]+$/)) html += `<tr>${cells.map(c=>`<td>${c}</td>`).join('')}</tr>`;
+        });
+        html += `</table>`;
+        return;
+      }
+    }
+
+    if (sec.heading.includes('SKILL') || sec.heading.includes('TECHNICAL')) {
+      sec.content.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        const parts = trimmed.split(':');
+        if (parts.length >= 2) {
+          html += `<div class="r-skills-group"><span class="r-bold">${parts[0].replace(/^\*\*/,'').replace(/\*\*$/,'').replace(/^•\s*/,'')}:</span> ${parts.slice(1).join(':').trim()}</div>`;
+        } else if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
+          html += `<div class="r-bullet">${trimmed.replace(/^[•\-]\s*/,'')}</div>`;
+        } else {
+          html += `<div class="r-para">${trimmed}</div>`;
+        }
+      });
+      return;
+    }
+
+    let inSubsection = false;
+    sec.content.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) { html += '<div style="margin-bottom:4px;"></div>'; return; }
+
+      if (trimmed.startsWith('###') || (trimmed.startsWith('**') && trimmed.endsWith('**') && !trimmed.startsWith('•'))) {
+        const text = trimmed.replace(/^###\s*/,'').replace(/^\*\*/,'').replace(/\*\*$/,'');
+        html += `<div class="r-company">${text}</div>`;
+        inSubsection = true;
+      }
+      else if (trimmed.startsWith('_') || (inSubsection && trimmed.match(/^\[|^\d{4}|^[A-Z][a-z]+,/))) {
+        html += `<div class="r-role-meta">${trimmed.replace(/^_|_$/g,'')}</div>`;
+      }
+      else if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
+        html += `<div class="r-bold r-para" style="margin-top:8px;">${trimmed.replace(/^\*\*|\*\*$/g,'')}</div>`;
+      }
+      else if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')) {
+        const text = trimmed.replace(/^[•\-\*]\s*/,'').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+        html += `<div class="r-bullet">${text}</div>`;
+      }
+      else {
+        const text = trimmed.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+        html += `<div class="r-para">${text}</div>`;
+      }
+    });
+  });
+
+  html += `</div>`;
+  return html;
+}
+
+// Assembles the full cover letter text (header block + subject + body +
+// sign-off with the candidate's actual name) exactly as it will appear
+// in both the PDF and the copy-to-clipboard output — one place that
+// defines "the letter" so every surface matches.
+function buildCoverLetterText(jobId) {
+  const data = S.tailoredResumes[jobId];
+  const job = S.jobs.find(j => j.id === jobId);
+  if (!data || !data.coverLetter) return '';
+  const name = S.parsedProfile?.name || '';
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const addressLines = ['Hiring Team', job?.company || '', job?.location || ''].filter(Boolean).join('\n');
+  const subject = data.coverLetter.subjectLine || `Re: ${job?.title || 'Role'}`;
+  const body = (data.coverLetter.body || '').trim();
+  return `${dateStr}\n\n${addressLines}\n\n${subject}\n\n${body}${name ? '\n' + name : ''}`;
+}
+
+let _previewMeta = {};
+function previewTailored(kind, jobId, jobTitle) {
+  const data = S.tailoredResumes[jobId];
+  if (!data) return;
+  _previewMeta = { kind, jobId, jobTitle };
+  const job = S.jobs.find(j => j.id === jobId);
+  const brand = getCompanyBrandColor(job?.company || '');
+
+  if (kind === 'resume') {
+    if (!data.resume) return;
+    const resumeHTML = buildResumeHTML(data.resume, S.parsedProfile?.name, brand.primary);
+    document.getElementById('previewTitle').textContent = `Preview — Tailored Resume · ${jobTitle}`;
+    document.getElementById('previewBody').innerHTML = resumeHTML;
+  } else {
+    if (!data.coverLetter) return;
+    const letterText = buildCoverLetterText(jobId);
+    document.getElementById('previewTitle').textContent = `Preview — Cover Letter · ${jobTitle}`;
+    document.getElementById('previewBody').innerHTML = `<div class="resume-doc" style="--resume-accent:${brand.primary};white-space:pre-wrap;line-height:1.8;">${escapeResumeHTML(letterText)}</div>`;
+  }
+  document.getElementById('previewModalOverlay').classList.add('open');
+}
+function closePreview() { document.getElementById('previewModalOverlay').classList.remove('open'); }
+function downloadFromPreview(fmt) {
+  if (_previewMeta.kind === 'resume') downloadResume(_previewMeta.jobId, _previewMeta.jobTitle, fmt);
+  else downloadCoverLetterFile(_previewMeta.jobId, _previewMeta.jobTitle, fmt === 'docx' ? 'doc' : fmt);
+}
+
+// Builds "<Candidate>_Resume_<Company>" style base filenames per the
+// agreed naming convention, sanitised to safe filename characters.
+function tailoredFileBaseNames(jobId) {
+  const job = S.jobs.find(j => j.id === jobId);
+  const candidate = (S.parsedProfile?.name || 'Candidate').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Candidate';
+  const companyShort = (job?.company || 'Company').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Company';
+  return { candidate, companyShort };
+}
+
+function downloadResume(jobId, jobTitle, fmt) {
+  offrdTrack('resume_download', {format: fmt, job_title: jobTitle});
+  const data = S.tailoredResumes[jobId];
+  if (!data || !data.resume) { alert('Resume not found'); return; }
+  if (fmt === 'pdf') downloadResumePdf(jobId, jobTitle);
+  else downloadResumeDocx(jobId, jobTitle);
+}
+
+function downloadResumeDocx(jobId, jobTitle) {
+  const _job_d = S.jobs.find(j => j.id === jobId);
+  const _brand_d = getCompanyBrandColor(_job_d?.company || '');
+  const BRAND_PRIMARY_D = _brand_d.primary;
+  const BRAND_HEX_D = BRAND_PRIMARY_D.replace('#', ''); // docx.js wants hex without the #
+  if (!window.docx) { alert('Document library still loading — please wait a moment and try again.'); return; }
+  const data = S.tailoredResumes[jobId];
+  const v = data && data.resume;
+  if (!v) return;
+  try {
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle, Table, TableRow, TableCell, WidthType, AlignmentType } = window.docx;
+    const name = S.parsedProfile?.name || 'Resume';
+    const contact = getResumeContactParts().join(' | ');
+    const headline = getResumeHeadline().replace(/ · /g, ' | ');
+    const children = [];
+
+    children.push(new Paragraph({ children: [new TextRun({ text: name, bold: true, size: 52, font: 'Calibri', color: BRAND_HEX_D })], alignment: AlignmentType.CENTER, spacing: { after: 60 } }));
+    if (contact) children.push(new Paragraph({ children: [new TextRun({ text: contact, size: 18, color: '555570', font: 'Calibri' })], alignment: AlignmentType.CENTER, spacing: { after: 40 } }));
+    if (headline) children.push(new Paragraph({ children: [new TextRun({ text: headline, size: 18, color: '555570', font: 'Calibri' })], alignment: AlignmentType.CENTER, spacing: { after: 40 } }));
+    // A coloured rule under the contact line gives the header the same
+    // visual anchor as the PDF's accent band — Word doesn't make a
+    // full-width tinted background behind text easy to do safely
+    // (font-level shading risks a black-background render in some
+    // versions), so a clean, thicker horizontal rule does the same
+    // "this is the top of the document" job without that risk.
+    children.push(new Paragraph({
+      children: [new TextRun({ text: '', size: 2 })],
+      border: { bottom: { color: BRAND_HEX_D, space: 1, style: BorderStyle.SINGLE, size: 18 } },
+      spacing: { after: 200 }
+    }));
+
+    (v.sections || []).forEach(sec => {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: sec.heading, bold: true, size: 23, allCaps: true, font: 'Calibri', color: BRAND_HEX_D })],
+        border: { bottom: { color: BRAND_HEX_D, space: 3, style: BorderStyle.SINGLE, size: 12 } },
+        spacing: { before: 260, after: 100 }
+      }));
+
+      if (!sec.content) return;
+
+      if ((sec.heading.includes('ACHIEVEMENT') || sec.heading.includes('SNAPSHOT')) && sec.content.includes('|')) {
+        const rows = sec.content.split('\n').filter(l => l.includes('|') && l.trim() && !l.match(/^[\s\-|]+$/));
+        if (rows.length > 1) {
+          const tableRows = rows.map((row, i) => {
+            const cells = row.split('|').map(c => c.trim()).filter(Boolean);
+            return new TableRow({ children: cells.map(cell => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: cell, bold: i===0, size: 18, font:'Calibri' })], spacing:{after:40} })], width: { size: Math.floor(9000/cells.length), type: WidthType.DXA } })) });
+          });
+          children.push(new Table({ rows: tableRows, width: { size: 9000, type: WidthType.DXA } }));
+          return;
+        }
+      }
+
+      sec.content.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) { children.push(new Paragraph({ text: '', spacing: { after: 40 } })); return; }
+        const isBold = trimmed.startsWith('**') && trimmed.endsWith('**');
+        const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*');
+        const isSubHead = trimmed.startsWith('###');
+        const cleanText = trimmed.replace(/^###\s*/,'').replace(/^\*\*/,'').replace(/\*\*$/,'').replace(/^[•\-\*]\s*/,'');
+        const inlineRuns = cleanText.split(/(\*\*[^*]+\*\*)/).map(part => {
+          if (part.startsWith('**') && part.endsWith('**')) return new TextRun({ text: part.slice(2,-2), bold: true, size: 19, font: 'Calibri' });
+          return new TextRun({ text: part, size: 19, font: 'Calibri' });
+        });
+        if (isSubHead || isBold) {
+          children.push(new Paragraph({ children: [new TextRun({ text: cleanText, bold: true, size: 20, font: 'Calibri', color: BRAND_HEX_D })], spacing: { before: 120, after: 40 } }));
+        } else if (isBullet) {
+          children.push(new Paragraph({ children: inlineRuns, bullet: { level: 0 }, spacing: { after: 60 } }));
+        } else {
+          children.push(new Paragraph({ children: inlineRuns, spacing: { after: 60 } }));
+        }
+      });
+    });
+
+    const doc = new Document({ sections: [{ properties: { page: { margin: { top: 720, bottom: 720, left: 900, right: 900 } } }, children }] });
+    const { candidate, companyShort } = tailoredFileBaseNames(jobId);
+    Packer.toBlob(doc).then(blob => {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `${candidate}_Resume_${companyShort}.docx`; a.click();
+    });
+  } catch(e) { alert('DOCX error: ' + e.message + '\n' + e.stack); }
+}
+
+function downloadResumePdf(jobId, jobTitle) {
+  const _job = S.jobs.find(j => j.id === jobId);
+  const _brand = getCompanyBrandColor(_job?.company || '');
+  const BRAND_PRIMARY = _brand.primary;
+  const BRAND_RGB = hexToRgb(BRAND_PRIMARY);
+  if (!window.jspdf) { alert('PDF library still loading — please wait a moment and try again.'); return; }
+  const data = S.tailoredResumes[jobId];
+  const v = data && data.resume;
+  if (!v) return;
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const ml = 14, mr = 14, pageW = 210, pageH = 297; // 12-15mm resume margins per spec
+    const maxW = pageW - ml - mr;
+    let y = 0;
+    const name = sanitizeForPdfFont(S.parsedProfile?.name || 'Resume');
+    const contact = sanitizeForPdfFont(getResumeContactParts().join('   ·   '));
+    const headline = sanitizeForPdfFont(getResumeHeadline());
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    const contactLines = contact ? doc.splitTextToSize(contact, maxW) : [];
+    const headlineLines = headline ? doc.splitTextToSize(headline, maxW) : [];
+    const headerTextLines = contactLines.length + headlineLines.length;
+    const headerHeight = Math.max(30, 21 + headerTextLines * 4);
+
+    // Header band: a light tint of the brand colour behind the name,
+    // instead of plain text floating on a blank page — gives the
+    // document an actual visual anchor point instead of starting flat.
+    // Mixed with white directly (94% white / 6% brand) rather than
+    // using jsPDF's opacity/GState API — same visual result, without
+    // depending on a less-common code path we can't render-test here.
+    const tint = BRAND_RGB.map(c => Math.round(c * 0.06 + 255 * 0.94));
+    doc.setFillColor(...tint);
+    doc.rect(0, 0, pageW, headerHeight, 'F');
+    // Thin solid accent rule under the band — the one strong line of
+    // brand colour on the page, anchoring everything below it.
+    doc.setFillColor(...BRAND_RGB);
+    doc.rect(0, headerHeight, pageW, 1.2, 'F');
+
+    y = 13;
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...BRAND_RGB);
+    const nw = doc.getTextWidth(name); doc.text(name, (pageW - nw)/2, y); y += 6;
+    if (headerTextLines) {
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(85,85,112);
+      [...contactLines, ...headlineLines].forEach(line => {
+        const lineWidth = doc.getTextWidth(line);
+        doc.text(line, (pageW-lineWidth)/2, y);
+        y += 4;
+      });
+    }
+    y = headerHeight + 9;
+
+    (v.sections || []).forEach(sec => {
+      if (y > 264) { doc.addPage(); y = 16; }
+      // Section heading as a small filled chip/label, not just bold
+      // text with a thin rule underneath — reads as a deliberate
+      // section marker rather than a plain line of bigger text.
+      const headingText = sanitizeForPdfFont(sec.heading).toUpperCase();
+      doc.setFont('helvetica','bold'); doc.setFontSize(9);
+      const headW = doc.getTextWidth(headingText) + 6;
+      doc.setFillColor(...BRAND_RGB);
+      doc.roundedRect(ml, y - 4, headW, 5.6, 1, 1, 'F');
+      doc.setTextColor(255,255,255);
+      doc.text(headingText, ml + 3, y);
+      y += 6.5;
+
+      if (!sec.content) return;
+
+      if ((sec.heading.includes('ACHIEVEMENT') || sec.heading.includes('SNAPSHOT')) && sec.content.includes('|')) {
+        const rows = sec.content.split('\n').filter(l => l.includes('|') && l.trim() && !l.match(/^[\s\-|]+$/));
+        if (rows.length > 1) {
+          const colW = maxW / Math.max(...rows.map(r => r.split('|').filter(Boolean).length));
+          rows.forEach((row, ri) => {
+            if (y > 260) { doc.addPage(); y = 16; }
+            const cells = row.split('|').map(c => sanitizeForPdfFont(c.trim()));
+            doc.setFontSize(8.5);
+            // Wrap each cell to its column width (minus a little padding)
+            // instead of hard-truncating, and use the tallest cell to set
+            // this row's height — otherwise long cell text gets cut off
+            // mid-word, which is exactly the "broken sentences" problem.
+            const wrappedCells = cells.map(cell => doc.splitTextToSize(cell, colW - 3));
+            const rowLines = Math.max(1, ...wrappedCells.map(w => w.length));
+            const rowH = rowLines * 4.2 + 2.5;
+            cells.forEach((cell, ci) => {
+              const cx = ml + ci * colW;
+              if (ri === 0) { doc.setFillColor(240,240,243); doc.rect(cx, y-4, colW, rowH, 'F'); doc.setFont('helvetica','bold'); }
+              else doc.setFont('helvetica','normal');
+              doc.setTextColor(26,26,46);
+              wrappedCells[ci].forEach((wl, li) => doc.text(wl, cx+1, y + li * 4.2));
+            });
+            y += rowH;
+          });
+          y += 2; return;
+        }
+      }
+
+      sec.content.split('\n').forEach(line => {
+        if (y > 268) { doc.addPage(); y = 16; }
+        const trimmed = line.trim();
+        if (!trimmed) { y += 2; return; }
+        const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*');
+        const isBoldHead = (trimmed.startsWith('**') && trimmed.endsWith('**')) || trimmed.startsWith('###');
+        const cleanText = sanitizeForPdfFont(trimmed.replace(/^###\s*/,'').replace(/^\*\*|\*\*$/g,'').replace(/^[•\-\*]\s*/,'').replace(/\*\*([^*]+)\*\*/g,'$1'));
+
+        if (isBoldHead) {
+          doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...BRAND_RGB);
+          const wrappedHead = doc.splitTextToSize(cleanText, maxW);
+          wrappedHead.forEach(wl => { if(y>268){doc.addPage();y=16;} doc.text(wl, ml, y); y += 4.2; });
+          y += 0.5;
+        } else if (isBullet) {
+          doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(...BRAND_RGB);
+          doc.text('•', ml, y);
+          doc.setFont('helvetica','normal'); doc.setTextColor(50,50,70);
+          const wrapped = doc.splitTextToSize(cleanText, maxW - 5);
+          wrapped.forEach((wl, wi) => { if(y>268){doc.addPage();y=16;} doc.text(wl, ml+4, y); y += 4.2; });
+        } else {
+          doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(50,50,70);
+          const wrapped = doc.splitTextToSize(cleanText, maxW);
+          wrapped.forEach(wl => { if(y>268){doc.addPage();y=16;} doc.text(wl, ml, y); y += 4.2; });
+        }
+      });
+      y += 3;
+    });
+
+    const { candidate, companyShort } = tailoredFileBaseNames(jobId);
+    doc.save(`${candidate}_Resume_${companyShort}.pdf`);
+  } catch(e) { alert('PDF error: ' + e.message); }
+}
+
+function downloadCoverLetterFile(jobId, jobTitle, format) {
+  offrdTrack('cover_letter_download', {format: format});
+  const data = S.tailoredResumes[jobId];
+  if (!data || !data.coverLetter) { alert('Cover letter not found'); return; }
+  if (format === 'pdf') downloadCoverLetterPdf(jobId, jobTitle);
+  else downloadCoverLetterDocx(jobId, jobTitle);
+}
+
+// Matched-pair PDF: same brand accent, same header band style, and the
+// same helvetica family as the resume — but cover-letter proportions
+// per spec (larger margins, 10pt body) rather than the resume's
+// compact sizing.
+function downloadCoverLetterPdf(jobId, jobTitle) {
+  const job = S.jobs.find(j => j.id === jobId);
+  const brand = getCompanyBrandColor(job?.company || '');
+  const BRAND_RGB = hexToRgb(brand.primary);
+  if (!window.jspdf) { alert('PDF library still loading — please wait a moment and try again.'); return; }
+  const data = S.tailoredResumes[jobId];
+  if (!data || !data.coverLetter) return;
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const ml = 19, mr = 19, pageW = 210; // 18-20mm cover letter margins per spec
+    const maxW = pageW - ml - mr;
+    let y = 0;
+    const name = sanitizeForPdfFont(S.parsedProfile?.name || '');
+    const contact = sanitizeForPdfFont(getResumeContactParts().join('   ·   '));
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+    const contactLines = contact ? doc.splitTextToSize(contact, maxW) : [];
+    const headerHeight = Math.max(26, 19 + contactLines.length * 4.2);
+
+    // Same header band treatment as the resume: brand-tinted band,
+    // solid accent rule beneath it.
+    const tint = BRAND_RGB.map(c => Math.round(c * 0.06 + 255 * 0.94));
+    doc.setFillColor(...tint);
+    doc.rect(0, 0, pageW, headerHeight, 'F');
+    doc.setFillColor(...BRAND_RGB);
+    doc.rect(0, headerHeight, pageW, 1.2, 'F');
+
+    y = 13;
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...BRAND_RGB);
+    if (name) { const nw = doc.getTextWidth(name); doc.text(name, (pageW - nw)/2, y); y += 6; }
+    if (contactLines.length) {
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(85,85,112);
+      contactLines.forEach(line => { const lw = doc.getTextWidth(line); doc.text(line, (pageW-lw)/2, y); y += 4.2; });
+    }
+    y = headerHeight + 12;
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(50,50,70);
+    const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    doc.text(dateStr, ml, y); y += 7;
+
+    const addressLines = ['Hiring Team', job?.company || '', job?.location || ''].filter(Boolean).map(sanitizeForPdfFont);
+    addressLines.forEach(line => { doc.text(line, ml, y); y += 5; });
+    y += 3;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...BRAND_RGB);
+    const subject = sanitizeForPdfFont(data.coverLetter.subjectLine || `Re: ${job?.title || 'Role'}`);
+    doc.splitTextToSize(subject, maxW).forEach(wl => { doc.text(wl, ml, y); y += 5.2; });
+    y += 4;
+
+    const bodyText = sanitizeForPdfFont((data.coverLetter.body || '').trim());
+    const fullBody = bodyText + (S.parsedProfile?.name ? '\n' + name : '');
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(30,30,40);
+    fullBody.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) { y += 4; return; }
+      const wrapped = doc.splitTextToSize(trimmed, maxW);
+      wrapped.forEach(wl => { if (y > 275) { doc.addPage(); y = 20; } doc.text(wl, ml, y); y += 5.6; });
+    });
+
+    const { candidate, companyShort } = tailoredFileBaseNames(jobId);
+    doc.save(`${candidate}_CoverLetter_${companyShort}.pdf`);
+  } catch(e) { alert('PDF error: ' + e.message); }
+}
+
+// DOCX counterpart, styled to match: same brand-coloured header rule,
+// same font family, larger cover-letter margins/body size than the resume.
+function downloadCoverLetterDocx(jobId, jobTitle) {
+  const job = S.jobs.find(j => j.id === jobId);
+  const brand = getCompanyBrandColor(job?.company || '');
+  const BRAND_HEX = brand.primary.replace('#', '');
+  if (!window.docx) { alert('Document library still loading — please wait a moment and try again.'); return; }
+  const data = S.tailoredResumes[jobId];
+  if (!data || !data.coverLetter) return;
+  try {
+    const { Document, Packer, Paragraph, TextRun, BorderStyle, AlignmentType } = window.docx;
+    const name = S.parsedProfile?.name || '';
+    const contact = getResumeContactParts().join(' | ');
+    const children = [];
+
+    if (name) children.push(new Paragraph({ children: [new TextRun({ text: name, bold: true, size: 24, font: 'Calibri', color: BRAND_HEX })], alignment: AlignmentType.CENTER, spacing: { after: 60 } }));
+    if (contact) children.push(new Paragraph({ children: [new TextRun({ text: contact, size: 19, color: '555570', font: 'Calibri' })], alignment: AlignmentType.CENTER, spacing: { after: 40 } }));
+    children.push(new Paragraph({
+      children: [new TextRun({ text: '', size: 2 })],
+      border: { bottom: { color: BRAND_HEX, space: 1, style: BorderStyle.SINGLE, size: 18 } },
+      spacing: { after: 240 }
+    }));
+
+    const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    children.push(new Paragraph({ children: [new TextRun({ text: dateStr, size: 20, font: 'Calibri' })], spacing: { after: 160 } }));
+    ['Hiring Team', job?.company || '', job?.location || ''].filter(Boolean).forEach(line => {
+      children.push(new Paragraph({ children: [new TextRun({ text: line, size: 20, font: 'Calibri' })], spacing: { after: 40 } }));
+    });
+    children.push(new Paragraph({ text: '', spacing: { after: 120 } }));
+
+    const subject = data.coverLetter.subjectLine || `Re: ${job?.title || 'Role'}`;
+    children.push(new Paragraph({ children: [new TextRun({ text: subject, bold: true, size: 20, font: 'Calibri', color: BRAND_HEX })], spacing: { after: 200 } }));
+
+    const bodyText = (data.coverLetter.body || '').trim() + (name ? '\n' + name : '');
+    bodyText.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) { children.push(new Paragraph({ text: '', spacing: { after: 80 } })); return; }
+      children.push(new Paragraph({ children: [new TextRun({ text: trimmed, size: 20, font: 'Calibri' })], spacing: { after: 120 } }));
+    });
+
+    const doc = new Document({ sections: [{ properties: { page: { margin: { top: 900, bottom: 900, left: 1100, right: 1100 } } }, children }] });
+    const { candidate, companyShort } = tailoredFileBaseNames(jobId);
+    Packer.toBlob(doc).then(blob => {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `${candidate}_CoverLetter_${companyShort}.docx`; a.click();
+    });
+  } catch(e) { alert('DOCX error: ' + e.message + '\n' + e.stack); }
+}
+
+function copyCoverLetter(jobId) {
+  const text = buildCoverLetterText(jobId);
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    const original = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = original, 2000);
+  });
+}
+
+function copyTailored() {
+  const text = document.getElementById('tailoredText')?.innerText;
+  if (text) navigator.clipboard.writeText(text).then(() => { alert('Copied!'); });
+}
+
+// ─── Pipeline ─────────────────────────────────────────────────────────
+// Note: persistPipeline() and updatePipelineBadge() live in offrd-app.js
+function saveJobToPipeline(jobId) {
+  const job = S.jobs.find(j => j.id === jobId);
+  if (!job) return;
+  const alreadyIn = Object.values(S.pipeline).some(col => col.find(j => j.id === jobId));
+  if (alreadyIn) { switchTab('pipeline'); return; }
+  S.pipeline.saved.push({ id: job.id, title: job.title, company: job.company, source: job.source, url: job.url, apply_url: job.apply_url, score: job.scores?.overall, addedAt: new Date().toISOString() });
+  persistPipeline();
+  updateOnboarding();
+  const btn = document.getElementById('save-' + jobId);
+  if (btn) { btn.textContent = '✓ Saved'; btn.style.color = 'var(--green)'; }
+  updatePipelineBadge();
+}
+
+function moveJob(jobId, fromCol, toCol) {
+  const idx = S.pipeline[fromCol].findIndex(j => j.id === jobId);
+  if (idx === -1) return;
+  const [job] = S.pipeline[fromCol].splice(idx, 1);
+  if (toCol) S.pipeline[toCol].push(job);
+  persistPipeline();
+  updatePipelineBadge();
+  updateOnboarding();
+  renderPipeline();
+}
+
+function renderPipeline() {
+  const cols = ['saved','applied','interview','offer'];
+  const nextCol = { saved:'applied', applied:'interview', interview:'offer', offer: null };
+  const nextLabel = { saved:'→ Applied', applied:'→ Interview', interview:'→ Offer', offer: null };
+  updatePipelineBadge();
+  cols.forEach(col => {
+    const el = document.getElementById('col-' + col);
+    const cnt = document.getElementById('cnt-' + col);
+    if (!el) return;
+    cnt.textContent = S.pipeline[col].length;
+    if (!S.pipeline[col].length) { el.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:20px 0;">Empty</div>'; return; }
+    el.innerHTML = S.pipeline[col].map(job => {
+      const scoreCol = job.score >= 75 ? 'var(--green)' : job.score >= 50 ? 'var(--amber)' : 'var(--red)';
+      const next = nextCol[col]; const nextLbl = nextLabel[col];
+      return `<div class="pipeline-card">
+        <div class="pipeline-card-title">${job.title}</div>
+        <div class="pipeline-card-company">${job.company}</div>
+        <div class="pipeline-card-meta">
+          <span class="tag tag-${job.source}" style="font-size:10px;">${job.source}</span>
+          <span style="font-size:11px;font-family:'DM Mono',monospace;color:${scoreCol};">${job.score || '?'}</span>
+        </div>
+        <div class="pipeline-move" style="margin-top:8px;">
+          ${next ? `<button onclick="moveJob('${job.id}','${col}','${next}')">${nextLbl}</button>` : '<span style="font-size:10px;color:var(--green);">🎉 Offer!</span>'}
+          <button onclick="moveJob('${job.id}','${col}',null)" style="color:var(--red);">Remove</button>
+          <button onclick="window.open('${job.apply_url||job.url||'#'}','_blank','noopener')">Apply ↗</button>
+        </div>
+      </div>`;
+    }).join('');
+  });
+}
+
+function clearPipeline() {
+  if (!confirm('Clear all pipeline items?')) return;
+  S.pipeline = { saved:[], applied:[], interview:[], offer:[] };
+  persistPipeline();
+  renderPipeline();
+  updatePipelineBadge();
+}
+
+function exportPipelineCSV() {
+  const rows = [['Stage','Title','Company','Source','Score','URL','Added']];
+  ['saved','applied','interview','offer'].forEach(col => {
+    S.pipeline[col].forEach(j => rows.push([col, j.title, j.company, j.source, j.score||'', j.url||'', j.addedAt||'']));
+  });
+  const csv = rows.map(r => r.map(c => '"' + String(c||'').replace(/"/g,'""') + '"').join(',')).join('\n');
+  const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'offrd_pipeline.csv'; a.click();
+}
+
+// ─── Screenshot Capture ────────────────────────────────────────────────
+
+// ─── Search History ───────────────────────────────────────────────────
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  if (!S.searchHistory.length) {
+    el.innerHTML = '<div class="empty"><span class="empty-icon">🕐</span><h3>No search history yet</h3><p>Run your first search and it will appear here.</p></div>';
+    return;
+  }
+  el.innerHTML = '<div class="history-list">' + S.searchHistory.map(h => `
+    <div class="history-item" onclick="rerunSearch('${h.id}')">
+      <div>
+        <div class="history-kw">${h.keywords}</div>
+        <div class="history-meta">${h.location||'Any location'} · ${(h.boards||[]).join(', ')} · ${h.resultCount||0} results · ${h.date}</div>
+      </div>
+      <span class="history-rerun">↺ Re-run</span>
+    </div>`).join('') + '</div>';
+}
+
+// Re-running a search now means: hand off the saved keywords/boards to
+// search.html (it can't run here — the search form lives on that page)
+// and ask it to auto-trigger the search on load.
+function rerunSearch(histId) {
+  const entry = S.searchHistory.find(h => String(h.id) === String(histId));
+  if (!entry) return;
+  sessionStorage.setItem('offrd_rerun', JSON.stringify({
+    keywords: entry.keywords, boards: entry.boards || [],
+    city: entry.city || '', country: entry.countryCode || ''
+  }));
+  offrdNavigate('search.html?rerun=1');
+}
+
+function clearHistory() {
+  if (!confirm('Clear search history?')) return;
+  S.searchHistory = [];
+  localStorage.removeItem('offrd_history');
+  renderHistory();
+}
+
+// ─── Tab switching (Search results / Pipeline / History) ──────────────
+function switchTab(tab) {
+  ['search','pipeline','history'].forEach(t => {
+    const contentEl = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1) + 'Content');
+    if (contentEl) contentEl.style.display = t === tab ? 'block' : 'none';
+    const btn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+  if (tab === 'pipeline') renderPipeline();
+  if (tab === 'history') renderHistory();
+}
+
+// ─── Page Init ────────────────────────────────────────────────────────
+(function initResultsPage() {
+  if (!requireAuth()) return;
+
+  const hadState = loadState();
+  offrdSharedInit();
+
+  // Deep-link to a specific tab, e.g. results.html?tab=pipeline
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab');
+  const wantsPipelineOrHistory = tab === 'pipeline' || tab === 'history';
+
+  // Pipeline and History are persisted independently of any search
+  // (S.pipeline / S.searchHistory live in localStorage), so a person
+  // should be able to reach them even if they haven't run a search
+  // yet this session. Only the Search-results tab actually needs
+  // S.jobs — redirect to upload.html ONLY when that's what's being
+  // requested and there's nothing to show.
+  if (!wantsPipelineOrHistory && (!hadState || !S.jobs || !S.jobs.length)) {
+    window.location.href = 'upload.html';
+    return;
+  }
+
+  if (S.jobs && S.jobs.length) renderResults();
+
+  if (wantsPipelineOrHistory) switchTab(tab);
+})();
+</script>
+</body>
+</html>
